@@ -1,8 +1,18 @@
 import { sveltekit } from '@sveltejs/kit/vite';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vitest/config';
+import { fileURLToPath, URL } from 'node:url';
+
+const testing = !!process.env.VITEST;
 
 export default defineConfig({
-	plugins: [sveltekit()],
+	plugins: testing ? [svelte()] : [sveltekit()],
+	resolve: {
+		conditions: testing ? ['browser'] : [],
+		alias: testing
+			? { $lib: fileURLToPath(new URL('./src/lib', import.meta.url)) }
+			: {}
+	},
 	test: {
 		include: ['src/**/*.{test,spec}.{js,ts}'],
 		environment: 'node',
