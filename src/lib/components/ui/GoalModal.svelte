@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { modalStore } from '$lib/stores/modal';
 
 	interface Goal {
@@ -28,8 +27,10 @@
 	let saving = $state(false);
 	let error = $state('');
 
-	// Populate form fields from the goal prop once, after mount (edit mode)
-	onMount(() => {
+	// Populate form fields reactively whenever the goal prop changes (edit mode).
+	// Using $effect instead of onMount ensures the form re-populates if the
+	// prop is updated while the component is already mounted (e.g. in Storybook).
+	$effect(() => {
 		if (goal) {
 			title = goal.title ?? '';
 			note = goal.note ?? '';
@@ -96,6 +97,7 @@
 				type="text"
 				bind:value={title}
 				placeholder="What do you want to achieve?"
+				data-testid="goal-title-input"
 				required
 			/>
 		</label>

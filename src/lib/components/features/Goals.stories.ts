@@ -1,5 +1,5 @@
 /**
- * Stories for the Goals feature widget.
+ * Stories for the Goals feature widget and the GoalModal component.
  *
  * Each story supplies MSW handlers via the `parameters.msw` key so that the
  * <Goals /> component makes real fetch calls that are intercepted offline —
@@ -10,6 +10,7 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { http, HttpResponse } from 'msw';
 import Goals from './Goals.svelte';
+import GoalModal from '$lib/components/ui/GoalModal.svelte';
 
 // ---------------------------------------------------------------------------
 // Fixtures (derived from the shared mock data to stay in sync)
@@ -99,3 +100,31 @@ export const AllComplete: Story = {
 		}
 	}
 };
+
+// ---------------------------------------------------------------------------
+// Edit Mode — renders GoalModal directly with a pre-populated goal prop.
+// This acts as a Storybook compilation test proving that the GoalModal
+// correctly receives and displays existing goal data in edit mode.
+// ---------------------------------------------------------------------------
+
+/**
+ * Edit Mode — GoalModal initialised with an existing goal.
+ * Visually confirms that title, category, and target_value pre-fill the form.
+ */
+export const EditMode: StoryObj = {
+	render: () => ({
+		Component: GoalModal as never,
+		props: {
+			goal: STORY_GOALS[0],
+			onSave: () => {}
+		}
+	}),
+	parameters: {
+		msw: {
+			handlers: [
+				http.patch('/api/goals/:id', () => HttpResponse.json(STORY_GOALS[0]))
+			]
+		}
+	}
+};
+

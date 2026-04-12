@@ -93,5 +93,15 @@ export const handlers = [
 
 	http.post('http://*/api/auth/logout', () => {
 		return new HttpResponse(null, { status: 200 });
+	}),
+
+	// --- User settings --------------------------------------------------
+	http.get('http://*/api/settings', () => {
+		return HttpResponse.json({ auto_delete: false });
+	}),
+
+	http.patch('http://*/api/settings', async ({ request }) => {
+		const body = (await request.json()) as Record<string, unknown>;
+		return HttpResponse.json({ auto_delete: Boolean(body.auto_delete) });
 	})
 ];

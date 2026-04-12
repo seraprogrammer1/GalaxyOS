@@ -11,7 +11,7 @@ const MONGODB_URI =
 const SALT_ROUNDS = 10; // Lower cost factor for faster test seeding
 
 // ---------------------------------------------------------------------------
-// Minimal schema definition (mirrors the server-side User model)
+// Minimal schema definitions (mirror the server-side models)
 // ---------------------------------------------------------------------------
 const userSchema = new Schema({
         username: { type: String, required: true, unique: true },
@@ -20,8 +20,32 @@ const userSchema = new Schema({
         admin_pin_hash: { type: String }
 });
 
+const goalSchema = new Schema({
+        title: { type: String, required: true },
+        note: { type: String, default: '' },
+        category: { type: String, default: '' },
+        completed: { type: Boolean, default: false },
+        target_value: { type: Number, default: 1 },
+        current_value: { type: Number, default: 0 },
+        due_date: { type: Date },
+        owner: { type: Schema.Types.ObjectId, ref: 'User', required: true }
+});
+
+const userSettingsSchema = new Schema({
+        user_id: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+        auto_delete: { type: Boolean, default: false }
+});
+
 function getUserModel() {
         return mongoose.models.User ?? mongoose.model('User', userSchema);
+}
+
+function getGoalModel() {
+        return mongoose.models.Goal ?? mongoose.model('Goal', goalSchema);
+}
+
+function getUserSettingsModel() {
+        return mongoose.models.UserSettings ?? mongoose.model('UserSettings', userSettingsSchema);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,6 +109,62 @@ export async function clearTestDB(): Promise<void> {
         const adminHash = await bcrypt.hash('admin', SALT_ROUNDS);
         const User = getUserModel();
         await User.create({ username: 'admin', password_hash: adminHash, role: 'admin' });
+
+        await mongoose.disconnect();
+}
+
+/**
+ * Seeds a single goal for the given username.
+ * Connects to the test DB, finds the user by username, creates the goal,
+ * then disconnects.
+ */
+export async function seedGoalForUser(
+        username: string,
+        goalData: {
+                title: string;
+                note?: string;
+                category?: string;
+                target_value?: number;
+                completed?: boolean;
+        }
+): Promise<void> {
+        await connectForTest();
+        const User = getUserModel();
+        const user = await User.findOne({ username });
+        if (!user) throw new Error(`seedGoalForUser: user "${username}" not found`);
+
+        const Goal = getGoalModel();
+        await Goal.create({
+                title: goalData.title,
+                note: goalData.note ?? '',
+                category: goalData.category ?? '',
+                target_value: goalData.target_value ?? 1,
+                completed: goalData.completed ?? false,
+                owner: user._id
+        });
+
+        await mongoose.disconnect();
+}
+
+/**
+ * Upserts UserSettings for the given username.
+ * Safe to call before or after seedTestUsers.
+ */
+export async function upsertUserSettingsForUser(
+        username: string,
+        settings: { auto_delete: boolean }
+): Promise<void> {
+        await connectForTest();
+        const User = getUserModel();
+        const user = await User.findOne({ username });
+        if (!user) throw new Error(`upsertUserSettingsForUser: user "${username}" not found`);
+
+        const UserSettings = getUserSettingsModel();
+        await UserSettings.findOneAndUpdate(
+                { user_id: user._id },
+                { $set: { auto_delete: settings.auto_delete } },
+                { upsert: true, new: true }
+        );
 
         await mongoose.disconnect();
 }

@@ -1,7 +1,8 @@
 <script lang="ts">
-        import { onMount } from 'svelte';
+        import { untrack } from 'svelte';
         import { modalStore } from '$lib/stores/modal';
         import GoalModal from '$lib/components/ui/GoalModal.svelte';
+        import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
 
         interface Goal {
                 _id: string;
@@ -17,6 +18,7 @@
         let goals = $state<Goal[]>([]);
         let loading = $state(true);
         let fetchError = $state('');
+        let userSettings = $state<{ auto_delete: boolean }>({ auto_delete: false });
 
         // ---------------------------------------------------------------------------
         // Data fetching
@@ -35,7 +37,29 @@
                 }
         }
 
-        onMount(fetchGoals);
+        // Run once on mount — using $effect because onMount callbacks are not
+        // invoked during SvelteKit SSR hydration in Svelte 5 runes mode.
+        $effect(() => {
+                untrack(() => {
+                        fetchGoals();
+                        fetchSettings();
+                });
+        });
+
+        // ---------------------------------------------------------------------------
+        // Fetch user preferences
+        // ---------------------------------------------------------------------------
+        async function fetchSettings() {
+                try {
+                        const res = await fetch('/api/settings');
+                        if (res.ok) {
+                                const data = await res.json();
+                                userSettings = { auto_delete: Boolean(data.auto_delete) };
+                        }
+                } catch {
+                        // Non-critical — default (auto_delete: false) is safe
+                }
+        }
 
         // ---------------------------------------------------------------------------
         // Optimistic toggle for "completed"
@@ -85,6 +109,37 @@
                 goals = goals.filter((g) => g._id !== id);
                 await fetch(`/api/goals/${id}`, { method: 'DELETE' });
         }
+
+        // ---------------------------------------------------------------------------
+        // Delete with optional confirmation
+        // ---------------------------------------------------------------------------
+        function requestDelete(goal: Goal) {
+                // If the user has opted out of confirmation, delete immediately.
+                if (userSettings.auto_delete) {
+                        deleteGoal(goal._id);
+                        return;
+                }
+
+                modalStore.open(ConfirmModal as never, {
+                        title: 'Delete Goal',
+                        message: `Delete "${goal.title}"? This cannot be undone.`,
+                        showCheckbox: true,
+                        onConfirm: (dontAskAgain: boolean) => {
+                                if (dontAskAgain) {
+                                        // Persist the preference silently in the background.
+                                        userSettings = { ...userSettings, auto_delete: true };
+                                        fetch('/api/settings', {
+                                                method: 'PATCH',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ auto_delete: true })
+                                        }).catch(() => {});
+                                }
+                                deleteGoal(goal._id);
+                                modalStore.close();
+                        },
+                        onCancel: () => modalStore.close()
+                });
+        }
 </script>
 
 <section class="goals-widget" data-testid="goals-widget">
@@ -131,7 +186,7 @@
 
                                         <div class="card-actions">
                                                 <button onclick={() => openEditModal(goal)} aria-label="Edit {goal.title}">Edit</button>
-                                                <button onclick={() => deleteGoal(goal._id)} aria-label="Delete {goal.title}">Delete</button>
+                                                <button onclick={() => requestDelete(goal)} aria-label="Delete {goal.title}">Delete</button>
                                         </div>
                                 </li>
                         {/each}
