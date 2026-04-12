@@ -1,7 +1,7 @@
 <script lang="ts">
-	import LoadingSpinner from '$lib/components/ui/LoadingSpinner.svelte';
 	import SkeletonLoader from '$lib/components/ui/SkeletonLoader.svelte';
 	import DebugModal from '$lib/components/ui/DebugModal.svelte';
+	import Goals from '$lib/components/features/Goals.svelte';
 	import { modalStore } from '$lib/stores/modal';
 
 	let showSkeleton = $state(false);
@@ -15,10 +15,7 @@
 	<h2>Welcome back</h2>
 	<p class="subtitle">Galaxy OS is ready.</p>
 
-	<div class="widgets-placeholder">
-		<LoadingSpinner size={24} />
-		<span class="loading-label">Loading widgets…</span>
-	</div>
+	<Goals />
 
 	{#if showSkeleton}
 		<SkeletonLoader width="300px" height="20px" />
@@ -50,18 +47,6 @@
 
 	.subtitle {
 		color: var(--text-secondary, #6b6b8a);
-	}
-
-	.widgets-placeholder {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		color: var(--text-muted, #a0a0c0);
-		font-size: 0.875rem;
-		padding: 2rem;
-		background: var(--bg-glass, rgba(255, 255, 255, 0.6));
-		border-radius: var(--radius-md, 12px);
-		border: 1px solid var(--bg-glass-border, rgba(255, 255, 255, 0.85));
 	}
 
 	.debug-controls {
