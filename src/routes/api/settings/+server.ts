@@ -16,7 +16,13 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 	const settings = await UserSettings.findOneAndUpdate(
 		{ user_id: locals.session.user_id },
-		{ $setOnInsert: { auto_delete: false } },
+		{
+			$setOnInsert: {
+				auto_delete: false,
+				dashboard_layout: 'bento',
+				budget_variant: 'standard'
+			}
+		},
 		{ upsert: true, new: true }
 	);
 
@@ -38,6 +44,18 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 	const allowedUpdate: Record<string, unknown> = {};
 	if (typeof body.auto_delete === 'boolean') {
 		allowedUpdate.auto_delete = body.auto_delete;
+	}
+	if (
+		typeof body.dashboard_layout === 'string' &&
+		['bento', 'sidebar', 'columns'].includes(body.dashboard_layout)
+	) {
+		allowedUpdate.dashboard_layout = body.dashboard_layout;
+	}
+	if (
+		typeof body.budget_variant === 'string' &&
+		['standard', 'minimal'].includes(body.budget_variant)
+	) {
+		allowedUpdate.budget_variant = body.budget_variant;
 	}
 
 	await connectDB();

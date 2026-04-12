@@ -2,6 +2,7 @@ import { connectDB } from '$lib/server/db';
 import { seedDatabase } from '$lib/server/seeder';
 import { runMigrations } from '$lib/server/migrationRunner';
 import { Session } from '$lib/server/models/Session';
+import { User } from '$lib/server/models/User';
 import type { Handle } from '@sveltejs/kit';
 import 'dotenv/config';
 
@@ -35,9 +36,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 				};
 				// Populate legacy user local for backwards compatibility
 				if (sessionDoc.user_id) {
+					const userDoc = await User.findById(sessionDoc.user_id).lean();
 					event.locals.user = {
 						id: String(sessionDoc.user_id),
-						username: '',
+						username: (userDoc as Record<string, unknown>)?.username as string ?? '',
 						role: sessionDoc.role as string
 					};
 				}

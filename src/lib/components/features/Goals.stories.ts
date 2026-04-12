@@ -10,6 +10,7 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { http, HttpResponse } from 'msw';
 import Goals from './Goals.svelte';
+import StoryViewport from './StoryViewport.svelte';
 import GoalModal from '$lib/components/ui/GoalModal.svelte';
 
 // ---------------------------------------------------------------------------
@@ -44,6 +45,16 @@ const STORY_GOALS = [
 		current_value: 1
 	}
 ];
+
+const MANY_GOALS = Array.from({ length: 18 }, (_, i) => ({
+	_id: `overflow-${i + 1}`,
+	title: `Overflow Goal ${i + 1}`,
+	note: `This is a long-running objective #${i + 1}`,
+	category: i % 2 === 0 ? 'Focus' : 'Learning',
+	completed: i % 4 === 0,
+	target_value: 10,
+	current_value: (i % 10) + 1
+}));
 
 // ---------------------------------------------------------------------------
 // Meta
@@ -97,6 +108,22 @@ export const AllComplete: Story = {
 					HttpResponse.json(STORY_GOALS.map((g) => ({ ...g, completed: true })))
 				)
 			]
+		}
+	}
+};
+
+/** Overflow state — fixed-height viewport proving internal list scrolling and sticky header. */
+export const OverflowScrollable: Story = {
+	render: () => ({
+		Component: StoryViewport,
+		props: {
+			Component: Goals
+		}
+	}),
+	parameters: {
+		layout: 'padded',
+		msw: {
+			handlers: [http.get('/api/goals', () => HttpResponse.json(MANY_GOALS))]
 		}
 	}
 };

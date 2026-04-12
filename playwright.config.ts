@@ -4,7 +4,8 @@ const config: PlaywrightTestConfig = {
         webServer: {
                 command: 'npm run dev',
                 port: 5174,
-                reuseExistingServer: false,
+                reuseExistingServer: true,
+                timeout: 120000,
                 env: {
                         MONGODB_URI: 'mongodb://localhost:27017/galaxy_test_db'
                 }

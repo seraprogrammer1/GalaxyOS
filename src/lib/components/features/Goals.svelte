@@ -196,6 +196,10 @@
 
 <style>
         .goals-widget {
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+                min-height: 0;
                 background: var(--bg-glass, rgba(255, 255, 255, 0.6));
                 backdrop-filter: var(--blur-glass);
                 -webkit-backdrop-filter: var(--blur-glass);
@@ -210,6 +214,13 @@
                 align-items: center;
                 justify-content: space-between;
                 margin-bottom: 1rem;
+                position: sticky;
+                top: 0;
+                z-index: 2;
+                background: var(--bg-glass, rgba(255, 255, 255, 0.6));
+                backdrop-filter: var(--blur-glass);
+                -webkit-backdrop-filter: var(--blur-glass);
+                padding-bottom: 0.5rem;
         }
 
         h3 {
@@ -237,6 +248,10 @@
                 display: flex;
                 flex-direction: column;
                 gap: 0.75rem;
+                flex: 1;
+                min-height: 0;
+                overflow-y: auto;
+                padding-right: 0.35rem;
         }
 
         .goal-card {
