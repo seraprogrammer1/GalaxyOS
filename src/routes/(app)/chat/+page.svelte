@@ -1,0 +1,16 @@
+<section class="placeholder-page" data-testid="chat-page">
+	<h2>AI Chat</h2>
+	<p>Chat workspace placeholder for upcoming conversational tools.</p>
+</section>
+
+<style>
+	.placeholder-page {
+		height: 100%;
+		padding: 1rem;
+		border-radius: var(--radius-md, 12px);
+		background: var(--bg-glass, rgba(255, 255, 255, 0.6));
+		backdrop-filter: var(--blur-glass);
+		-webkit-backdrop-filter: var(--blur-glass);
+		border: 1px solid var(--bg-glass-border, rgba(255, 255, 255, 0.85));
+	}
+</style>

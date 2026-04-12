@@ -12,21 +12,17 @@ describe('Header (portable stories)', () => {
 		expect(getByText('Hello, testuser')).toBeTruthy();
 	});
 
-	it('renders the Galaxy OS title', () => {
+	it('renders the active page title', () => {
 		const { getByText } = render(Default.Component, { props: Default.props });
-		expect(getByText('Galaxy OS')).toBeTruthy();
+		expect(getByText('Dashboard')).toBeTruthy();
 	});
 
-	it('contains a link to /settings', () => {
+	it('does not render sidebar navigation links in header', () => {
 		const { container } = render(Default.Component, { props: Default.props });
 		const settingsLink = container.querySelector('a[href="/settings"]');
-		expect(settingsLink).not.toBeNull();
-	});
-
-	it('contains a link to /chat', () => {
-		const { container } = render(Default.Component, { props: Default.props });
 		const chatLink = container.querySelector('a[href="/chat"]');
-		expect(chatLink).not.toBeNull();
+		expect(settingsLink).toBeNull();
+		expect(chatLink).toBeNull();
 	});
 
 	it('shows a notification badge', () => {

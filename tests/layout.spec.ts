@@ -19,7 +19,7 @@ async function authenticate(page: import('@playwright/test').Page, context: impo
         ]);
 }
 
-test('layout: authenticates, accesses /dashboard, checks Header and background color', async ({ page, context }) => {
+test('layout: shows sidebar and updates active state on settings navigation', async ({ page, context }) => {
         // Authenticate the session
         await authenticate(page, context);
 
@@ -27,10 +27,22 @@ test('layout: authenticates, accesses /dashboard, checks Header and background c
         await page.goto('/dashboard');
         await page.waitForLoadState('networkidle');
 
-        // Inspect the DOM. Assert that the Header text "Galaxy OS" is visible
-        const header = page.locator('header');
-        await expect(header).toBeVisible();
-        await expect(header).toContainText('Galaxy OS');
+        // Assert sidebar is visible and positioned left
+        const sidebar = page.locator('[data-testid="sidebar"]');
+        await expect(sidebar).toBeVisible();
+        const bounds = await sidebar.boundingBox();
+        expect(bounds).toBeTruthy();
+        expect(bounds!.x).toBeLessThan(30);
+
+        // Dashboard is active by default on /dashboard
+        await expect(page.locator('a[href="/dashboard"]')).toHaveClass(/is-active/);
+
+        // Navigate using sidebar
+        await page.locator('a[href="/settings"]').click();
+        await expect(page).toHaveURL(/.*\/settings/);
+
+        // Settings link should become active
+        await expect(page.locator('a[href="/settings"]')).toHaveClass(/is-active/);
 
         // Assert the computed CSS of the <body> or <main> element matches the "Light Cosmic" background color
         const bgColors = await page.evaluate(() => {

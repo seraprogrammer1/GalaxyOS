@@ -10,7 +10,10 @@ export default defineConfig({
 	resolve: {
 		conditions: testing ? ['browser'] : [],
 		alias: testing
-			? { $lib: fileURLToPath(new URL('./src/lib', import.meta.url)) }
+			? {
+					$lib: fileURLToPath(new URL('./src/lib', import.meta.url)),
+					'$app/stores': fileURLToPath(new URL('./src/test-utils/app-stores.ts', import.meta.url))
+				}
 			: {}
 	},
 	test: {

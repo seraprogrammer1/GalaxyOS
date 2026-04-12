@@ -1,7 +1,22 @@
 <script lang="ts">
 	import { uiStore, type DashboardLayout, type BudgetVariant } from '$lib/stores/ui';
 
-	let { username = 'Explorer' }: { username?: string } = $props();
+	let {
+		username = 'Explorer',
+		currentPath = '/dashboard'
+	}: { username?: string; currentPath?: string } = $props();
+
+	const pageTitle = $derived(
+		currentPath === '/dashboard'
+			? 'Dashboard'
+			: currentPath === '/settings'
+				? 'Settings'
+				: currentPath === '/chat'
+					? 'AI Chat'
+					: currentPath === '/naca'
+						? 'NACA Calculator'
+						: 'Galaxy OS'
+	);
 
 	async function handleLogout() {
 		await fetch('/api/auth/logout', { method: 'POST' });
@@ -21,7 +36,7 @@
 
 <header class="glass-header glass">
 	<div class="header-left">
-		<h1 class="title">Galaxy OS</h1>
+		<h1 class="title">{pageTitle}</h1>
 		<p class="greeting">Hello, {username}</p>
 	</div>
 
@@ -30,7 +45,7 @@
 		<span class="weather-temp">72°F</span>
 	</div>
 
-	<nav class="header-nav">
+	<div class="header-controls">
 		<label class="compact-control">
 			<span>Layout</span>
 			<select
@@ -55,15 +70,8 @@
 				<option value="minimal">Minimal</option>
 			</select>
 		</label>
-
-		<a href="/chat" class="nav-link" aria-label="Chat">
-			<span class="nav-icon">💬</span>
-			<span class="notification-badge">3 New</span>
-		</a>
-		<a href="/settings" class="nav-link" aria-label="Settings">
-			<span class="nav-icon">⚙</span>
-		</a>
-	</nav>
+		<span class="notification-badge" aria-label="Notifications">3 New</span>
+	</div>
 
 	<button class="logout-btn" onclick={handleLogout}> Logout </button>
 </header>
@@ -136,7 +144,7 @@
 		transform: scale(0.97);
 	}
 
-	.header-nav {
+	.header-controls {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -161,29 +169,6 @@
 		font-size: 0.75rem;
 		color: var(--text-secondary, #6b6b8a);
 		background: #fff;
-	}
-
-	.nav-link {
-		position: relative;
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-		padding: 0.4rem 0.7rem;
-		border-radius: var(--radius-sm, 8px);
-		background: var(--bg-surface, #f0eef8);
-		text-decoration: none;
-		color: var(--text-secondary, #6b6b8a);
-		font-size: 0.85rem;
-		font-weight: 500;
-		transition: background 0.2s;
-	}
-
-	.nav-link:hover {
-		background: var(--bg-glass-border, rgba(255, 255, 255, 0.85));
-	}
-
-	.nav-icon {
-		font-size: 1rem;
 	}
 
 	.notification-badge {
