@@ -1,5 +1,6 @@
 import { connectDB } from '$lib/server/db';
 import { seedDatabase } from '$lib/server/seeder';
+import { runMigrations } from '$lib/server/migrationRunner';
 import { Session } from '$lib/server/models/Session';
 import type { Handle } from '@sveltejs/kit';
 import 'dotenv/config';
@@ -10,6 +11,7 @@ async function boot() {
 	if (booted) return;
 	booted = true;
 	await connectDB();
+	await runMigrations(); // apply any pending schema migrations
 	await seedDatabase();
 }
 
