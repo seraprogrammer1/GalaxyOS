@@ -1,0 +1,19 @@
+import{t as e}from"./chunk-BvrOYcoh.js";import{$ as t,A as n,B as r,E as i,F as a,Q as o,R as s,S as c,W as l,_ as u,c as d,f,it as p,n as m,nt as h,t as g,w as _,z as v}from"./client-BU1fzx-G.js";var y=e((()=>{}));function b(e,i){t(i,!0);let p=m(i,`budget`,19,()=>({remaining:`$4,520`,total:6e3,spent:1480,dailyAllowance:`$150`})),g=m(i,`variant`,3,`standard`),y=l(()=>Math.min(100,p().spent/p().total*100));var b=S(),C=r(s(b),2),w=s(C),T=r(s(w),2),E=s(T,!0);h(T),h(w);var D=r(w,2),O=r(s(D),2),k=s(O,!0);h(O),h(D),h(C);var A=r(C,2),j=e=>{var t=x(),i=v(t),o=s(i);h(i);var l=r(i,2),u=s(l),m=s(u);h(u);var g=r(u,2),b=s(g);h(g),h(l),a((e,t)=>{d(i,`aria-valuenow`,p().spent),d(i,`aria-valuemax`,p().total),f(o,`width: ${n(y)??``}%`),c(m,`$${e??``} spent`),c(b,`$${t??``} total`)},[()=>p().spent.toLocaleString(),()=>p().total.toLocaleString()]),_(e,t)};u(A,e=>{g()===`standard`&&e(j)}),h(b),a(()=>{c(E,p().remaining),c(k,p().dailyAllowance)}),_(e,b),o()}var x,S,C=e((()=>{p(),g(),y(),x=i(`<div class="progress-track svelte-1403tvt" role="progressbar" aria-label="Budget spent"><div class="progress-fill svelte-1403tvt"></div></div> <div class="budget-meta svelte-1403tvt"><span class="meta-item svelte-1403tvt"> </span> <span class="meta-item svelte-1403tvt"> </span></div>`,1),S=i(`<section class="budget-widget glass svelte-1403tvt" data-testid="budget-widget"><div class="widget-header svelte-1403tvt"><h3 class="svelte-1403tvt">Budget</h3> <span class="badge svelte-1403tvt">Monthly</span></div> <div class="metrics-grid svelte-1403tvt"><div class="metric svelte-1403tvt"><span class="metric-label svelte-1403tvt">Monthly Budget</span> <span class="metric-value svelte-1403tvt"> </span></div> <div class="metric svelte-1403tvt"><span class="metric-label svelte-1403tvt">Daily Allowance</span> <span class="metric-value svelte-1403tvt"> </span></div></div> <!></section>`),b.__docgen={data:[{name:`budget`,visibility:`public`,keywords:[],kind:`let`,type:{kind:`type`,type:`object`,text:`BudgetData`},static:!1,readonly:!1,defaultValue:`{ remaining: '$4,520', total: 6000, spent: 1480, dailyAllowance: '$150' }`},{name:`variant`,visibility:`public`,keywords:[],kind:`let`,type:{kind:`union`,type:[{kind:`const`,type:`string`,value:`standard`,text:`"standard"`},{kind:`const`,type:`string`,value:`minimal`,text:`"minimal"`}],text:`"standard" | "minimal"`},static:!1,readonly:!1,defaultValue:`"standard"`}],name:`BudgetWidget.svelte`}})),w,T,E,D,O;e((()=>{C(),w={title:`Features/BudgetWidget`,component:b},T={},E={args:{budget:{remaining:`$120`,total:6e3,spent:5880,dailyAllowance:`$10`}}},D={args:{budget:{remaining:`$6,000`,total:6e3,spent:0,dailyAllowance:`$200`}}},T.parameters={...T.parameters,docs:{...T.parameters?.docs,source:{originalSource:`{}`,...T.parameters?.docs?.source},description:{story:`Default — shows a typical monthly budget with remaining balance and daily allowance.`,...T.parameters?.docs?.description}}},E.parameters={...E.parameters,docs:{...E.parameters?.docs,source:{originalSource:`{
+  args: {
+    budget: {
+      remaining: '$120',
+      total: 6000,
+      spent: 5880,
+      dailyAllowance: '$10'
+    }
+  }
+}`,...E.parameters?.docs?.source},description:{story:`High spend — budget nearly exhausted.`,...E.parameters?.docs?.description}}},D.parameters={...D.parameters,docs:{...D.parameters?.docs,source:{originalSource:`{
+  args: {
+    budget: {
+      remaining: '$6,000',
+      total: 6000,
+      spent: 0,
+      dailyAllowance: '$200'
+    }
+  }
+}`,...D.parameters?.docs?.source},description:{story:`Fresh budget — nothing spent yet.`,...D.parameters?.docs?.description}}},O=[`Default`,`HighSpend`,`Fresh`]}))();export{T as Default,D as Fresh,E as HighSpend,O as __namedExportsOrder,w as default};
