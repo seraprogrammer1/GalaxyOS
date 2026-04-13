@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "dev:python": "cmd /c \"cd /d python-ai-service && venv\\Scripts\\activate.bat && uvicorn main:app --reload --port 8000\"",
+    "dev:python": "cmd /c \"cd /d python-ai-service && ..\\.venv\\Scripts\\activate.bat && uvicorn main:app --reload --port 8000\"",
     "dev:all": "run-p dev dev:python",
     "build": "vite build",
     "preview": "vite preview",
@@ -52,10 +52,13 @@
     "vitest": "^4.1.4"
   },
   "dependencies": {
+    "@types/dompurify": "^3.0.5",
     "bcrypt": "^6.0.0",
+    "dompurify": "^3.3.3",
     "dotenv": "^17.4.1",
     "ipaddr.js": "^2.3.0",
     "jsonwebtoken": "^9.0.3",
+    "marked": "^18.0.0",
     "mongoose": "^9.4.1"
   },
   "msw": {

@@ -11,10 +11,16 @@
 
 	let {
 		messages = [],
-		showTyping = false
+		showTyping = false,
+		onDeleteMessage,
+		onEditMessage,
+		onRefreshMessage
 	}: {
 		messages?: ChatMessage[];
 		showTyping?: boolean;
+		onDeleteMessage?: (index: number) => void;
+		onEditMessage?: (index: number, newContent: string) => void;
+		onRefreshMessage?: (index: number) => void;
 	} = $props();
 
 	let feedEl: HTMLElement | undefined;
@@ -34,7 +40,13 @@
 	{/if}
 
 	{#each messages as message, idx (`${message.role}-${idx}-${message.content}`)}
-		<MessageBubble role={message.role} content={message.content} />
+		<MessageBubble
+			role={message.role}
+			content={message.content}
+			onDelete={onDeleteMessage ? () => onDeleteMessage(idx) : undefined}
+			onEdit={message.role === 'user' && onEditMessage ? (c) => onEditMessage(idx, c) : undefined}
+			onRefresh={message.role !== 'user' && onRefreshMessage ? () => onRefreshMessage(idx) : undefined}
+		/>
 	{/each}
 
 	{#if showTyping}

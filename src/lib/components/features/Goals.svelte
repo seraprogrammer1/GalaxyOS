@@ -200,6 +200,8 @@
                 flex-direction: column;
                 height: 100%;
                 min-height: 0;
+		overflow: hidden;
+		overflow: hidden;
                 background: var(--bg-glass, rgba(255, 255, 255, 0.6));
                 backdrop-filter: var(--blur-glass);
                 -webkit-backdrop-filter: var(--blur-glass);
@@ -327,7 +329,7 @@
         .card-actions button {
                 padding: 0.2rem 0.6rem;
                 font-size: 0.75rem;
-                border: 1px solid var(--bg-glass-border, rgba(255, 255, 255, 0.85));
+                border: 1px solid var(--input-border, rgba(0, 0, 0, 0.12));
                 border-radius: var(--radius-sm, 8px);
                 background: transparent;
                 color: var(--text-secondary, #6b6b8a);

@@ -25,4 +25,6 @@ vite.config.ts.timestamp-*
 # Python
 python-ai-service/venv/
 python-ai-service/__pycache__/
+python-ai-service/scripts/
+scripts/
 *.pyc

@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { connectDB } from '$lib/server/db';
-import { UserSettings } from '$lib/server/models/UserSettings';
+import { UserSettings, GEMINI_MODELS, CHUB_MODELS } from '$lib/server/models/UserSettings';
 import type { RequestHandler } from '@sveltejs/kit';
 
 // ---------------------------------------------------------------------------
@@ -20,7 +20,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 			$setOnInsert: {
 				auto_delete: false,
 				dashboard_layout: 'bento',
-				budget_variant: 'standard'
+				budget_variant: 'standard',
+				default_provider: 'gemini',
+				gemini_model: 'gemini-2.5-flash',
+				chub_model: 'mythomax'
 			}
 		},
 		{ upsert: true, new: true }
@@ -56,6 +59,24 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 		['standard', 'minimal'].includes(body.budget_variant)
 	) {
 		allowedUpdate.budget_variant = body.budget_variant;
+	}
+	if (
+		typeof body.default_provider === 'string' &&
+		['gemini', 'chub'].includes(body.default_provider)
+	) {
+		allowedUpdate.default_provider = body.default_provider;
+	}
+	if (
+		typeof body.gemini_model === 'string' &&
+		(GEMINI_MODELS as readonly string[]).includes(body.gemini_model)
+	) {
+		allowedUpdate.gemini_model = body.gemini_model;
+	}
+	if (
+		typeof body.chub_model === 'string' &&
+		(CHUB_MODELS as readonly string[]).includes(body.chub_model)
+	) {
+		allowedUpdate.chub_model = body.chub_model;
 	}
 
 	await connectDB();

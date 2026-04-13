@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { connectDB } from '$lib/server/db';
 import { Chat } from '$lib/server/models/Chat';
+import { UserSettings } from '$lib/server/models/UserSettings';
 import type { RequestHandler } from '@sveltejs/kit';
 
 type PythonGenerateResponse =
@@ -8,6 +9,7 @@ type PythonGenerateResponse =
 	| {
 			text?: string;
 			message?: string;
+			detail?: string;
 	  };
 
 export const POST: RequestHandler = async ({ request, params, locals }) => {
@@ -33,6 +35,20 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
+	// Fetch user's AI preferences (non-fatal — fall back to defaults)
+	let provider = 'gemini';
+	let geminiModel = 'gemini-2.5-flash';
+	let chubModel = 'mythomax';
+	try {
+		const settings = await UserSettings.findOne({ user_id: locals.session.user_id });
+		if (settings) {
+			const s = settings as { default_provider?: string; gemini_model?: string; chub_model?: string };
+			if (s.default_provider) provider = s.default_provider;
+			if (s.gemini_model) geminiModel = s.gemini_model;
+			if (s.chub_model) chubModel = s.chub_model;
+		}
+	} catch { /* use defaults */ }
+
 	(chat as { messages: Array<{ role: string; content: string }> }).messages.push({
 		role: 'user',
 		content
@@ -43,12 +59,16 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({
-			messages: (chat as { messages: Array<{ role: string; content: string }> }).messages
+			messages: (chat as { messages: Array<{ role: string; content: string }> }).messages,
+			provider,
+			gemini_model: geminiModel,
+			chub_model: chubModel
 		})
 	});
 
 	if (!pythonResponse.ok) {
-		return json({ error: 'Failed to generate assistant response' }, { status: 502 });
+		const errBody = await pythonResponse.json().catch(() => ({ detail: 'AI service error' })) as { detail?: string };
+		return json({ error: errBody.detail ?? 'Failed to generate assistant response' }, { status: 502 });
 	}
 
 	const generated = (await pythonResponse.json()) as PythonGenerateResponse;

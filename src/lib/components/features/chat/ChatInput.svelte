@@ -2,16 +2,18 @@
 	let {
 		placeholder = 'Ask Galaxy AI anything...',
 		disabled = false,
+		canRetry = false,
 		onSend
 	}: {
 		placeholder?: string;
 		disabled?: boolean;
+		canRetry?: boolean;
 		onSend?: (content: string) => void;
 	} = $props();
 
 	let content = $state('');
 
-	const canSend = $derived(!disabled && content.trim().length > 0);
+	const canSend = $derived(!disabled && (content.trim().length > 0 || canRetry));
 
 	function submit(): void {
 		if (!canSend) {
@@ -35,13 +37,13 @@
 	<textarea
 		bind:value={content}
 		onkeydown={onKeyDown}
-		placeholder={placeholder}
+		placeholder={canRetry ? 'Press Send to retry last message…' : placeholder}
 		rows="3"
 		disabled={disabled}
 		data-testid="chat-input-textarea"
 	></textarea>
-	<button type="submit" disabled={!canSend} data-testid="chat-input-send">
-		Send
+	<button type="submit" disabled={!canSend} data-testid="chat-input-send" class:retry={canRetry && content.trim().length === 0}>
+		{canRetry && content.trim().length === 0 ? 'Retry' : 'Send'}
 	</button>
 </form>
 
@@ -97,6 +99,14 @@
 	button:disabled {
 		opacity: 0.45;
 		cursor: not-allowed;
+	}
+
+	button.retry {
+		background: linear-gradient(
+			135deg,
+			rgba(124, 110, 248, 0.9),
+			rgba(82, 130, 255, 0.9)
+		);
 	}
 
 	@media (max-width: 700px) {
