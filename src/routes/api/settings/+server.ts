@@ -23,7 +23,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 				budget_variant: 'standard',
 				default_provider: 'gemini',
 				gemini_model: 'gemini-2.5-flash',
-				chub_model: 'mythomax'
+				chub_model: 'mythomax',
+				chat_name: ''
 			}
 		},
 		{ upsert: true, new: true }
@@ -77,6 +78,9 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 		(CHUB_MODELS as readonly string[]).includes(body.chub_model)
 	) {
 		allowedUpdate.chub_model = body.chub_model;
+	}
+	if (typeof body.chat_name === 'string') {
+		allowedUpdate.chat_name = body.chat_name.trim().slice(0, 50);
 	}
 
 	await connectDB();

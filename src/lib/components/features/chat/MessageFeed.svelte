@@ -12,12 +12,16 @@
 	let {
 		messages = [],
 		showTyping = false,
+		charName,
+		userName,
 		onDeleteMessage,
 		onEditMessage,
 		onRefreshMessage
 	}: {
 		messages?: ChatMessage[];
 		showTyping?: boolean;
+		charName?: string;
+		userName?: string;
 		onDeleteMessage?: (index: number) => void;
 		onEditMessage?: (index: number, newContent: string) => void;
 		onRefreshMessage?: (index: number) => void;
@@ -40,19 +44,32 @@
 	{/if}
 
 	{#each messages as message, idx (`${message.role}-${idx}-${message.content}`)}
-		<MessageBubble
-			role={message.role}
-			content={message.content}
-			onDelete={onDeleteMessage ? () => onDeleteMessage(idx) : undefined}
-			onEdit={message.role === 'user' && onEditMessage ? (c) => onEditMessage(idx, c) : undefined}
-			onRefresh={message.role !== 'user' && onRefreshMessage ? () => onRefreshMessage(idx) : undefined}
-		/>
+		{@const isSystem = message.role === 'system'}
+		{#if !isSystem}
+			<MessageBubble
+				role={message.role}
+				content={message.content}
+				senderName={message.role === 'user' ? (userName ?? 'You') : (charName ?? 'AI')}
+				{charName}
+				{userName}
+				onDelete={onDeleteMessage ? () => onDeleteMessage(idx) : undefined}
+				onEdit={message.role === 'user' && onEditMessage ? (c) => onEditMessage(idx, c) : undefined}
+				onRefresh={message.role !== 'user' && onRefreshMessage ? () => onRefreshMessage(idx) : undefined}
+			/>
+		{/if}
 	{/each}
 
 	{#if showTyping}
 		<div class="typing-row" data-testid="chat-typing">
 			<div class="typing-spinner"><LoadingSpinner size={18} /></div>
-			<MessageBubble role="assistant" content="Assistant is typing..." pending={true} />
+			<MessageBubble
+				role="assistant"
+				content="..."
+				senderName={charName ?? 'AI'}
+				{charName}
+				{userName}
+				pending={true}
+			/>
 		</div>
 	{/if}
 </section>

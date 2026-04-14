@@ -8,6 +8,9 @@
 		role,
 		content,
 		pending = false,
+		senderName,
+		charName,
+		userName,
 		onDelete,
 		onEdit,
 		onRefresh
@@ -15,6 +18,9 @@
 		role: MessageRole;
 		content: string;
 		pending?: boolean;
+		senderName?: string;
+		charName?: string;
+		userName?: string;
 		onDelete?: () => void;
 		onEdit?: (newContent: string) => void;
 		onRefresh?: () => void;
@@ -23,9 +29,23 @@
 	let editing = $state(false);
 	let editContent = $state('');
 
+	/** Replace {{char}}, <char>, {{user}}, <user> macros with resolved names for display. */
+	const displayContent = $derived.by(() => {
+		let s = content;
+		if (charName) {
+			s = s.split('{{char}}').join(charName);
+			s = s.split('<char>').join(charName);
+		}
+		if (userName) {
+			s = s.split('{{user}}').join(userName);
+			s = s.split('<user>').join(userName);
+		}
+		return s;
+	});
+
 	const renderedHtml = $derived.by(() => {
 		if (role === 'user') return '';
-		const raw = marked.parse(content, { async: false }) as string;
+		const raw = marked.parse(displayContent, { async: false }) as string;
 		return typeof window !== 'undefined' ? DOMPurify.sanitize(raw) : raw;
 	});
 
@@ -46,6 +66,9 @@
 </script>
 
 <div class="bubble-wrap {role}">
+	{#if senderName}
+		<span class="bubble-sender-name">{senderName}</span>
+	{/if}
 	{#if editing}
 		<div class="edit-container">
 			<!-- svelte-ignore a11y_autofocus -->
@@ -71,7 +94,7 @@
 			aria-live={pending ? 'polite' : undefined}
 		>
 			{#if role === 'user'}
-				<p>{content}</p>
+				<p>{displayContent}</p>
 			{:else}
 				<div class="md-body">{@html renderedHtml}</div>
 			{/if}
@@ -117,6 +140,18 @@
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 0.2rem;
+	}
+
+	.bubble-sender-name {
+		font-size: 0.72rem;
+		font-weight: 700;
+		color: var(--text-secondary, #8888aa);
+		padding: 0 0.2rem;
+		letter-spacing: 0.01em;
+	}
+
+	.bubble-wrap.user .bubble-sender-name {
+		color: var(--accent-primary, #7c6ef8);
 	}
 
 	.bubble-wrap.user {
@@ -239,22 +274,22 @@
 	.md-body :global(em) { font-style: italic; }
 
 	.bubble.user {
-		color: #2f1631;
+		color: #fff;
 		background: linear-gradient(
 			135deg,
-			rgba(255, 107, 139, 0.9) 0%,
-			rgba(244, 168, 54, 0.82) 100%
+			rgba(124, 110, 248, 0.92) 0%,
+			rgba(92, 80, 218, 0.85) 100%
 		);
-		border: 1px solid rgba(255, 255, 255, 0.55);
+		border: 1px solid rgba(155, 140, 255, 0.4);
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
 	}
 
 	.bubble.assistant,
 	.bubble.system {
 		color: var(--text-primary, #2d2d3a);
-		background: rgba(255, 255, 255, 0.68);
-		border: 1px solid rgba(255, 255, 255, 0.9);
-		backdrop-filter: blur(14px);
-		-webkit-backdrop-filter: blur(14px);
+		background: rgba(255, 255, 255, 0.94);
+		border: 1px solid rgba(200, 190, 230, 0.5);
+		box-shadow: 0 2px 8px rgba(140, 120, 200, 0.1);
 	}
 
 	.bubble.system {

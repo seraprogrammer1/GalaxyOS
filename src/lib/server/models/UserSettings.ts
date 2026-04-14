@@ -41,7 +41,9 @@ const userSettingsSchema = new Schema(
 			type: String,
 			enum: [...CHUB_MODELS],
 			default: 'mythomax'
-		}
+		},
+		/** Display name shown above the user's chat bubbles */
+		chat_name: { type: String, default: '' }
 	},
 	{ timestamps: true }
 );

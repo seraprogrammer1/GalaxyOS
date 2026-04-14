@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { page } from '$app/stores';
+	import { get } from 'svelte/store';
 	import ChatInput from '$lib/components/features/chat/ChatInput.svelte';
 	import MessageFeed from '$lib/components/features/chat/MessageFeed.svelte';
 
@@ -14,6 +16,24 @@
 		_id: string;
 		title: string;
 		messages?: ChatMessage[];
+		character_id?: string | null;
+		lorebook_id?: string | null;
+		system_prompt?: string;
+		post_history_instructions?: string;
+		assistant_prefill?: string;
+		context_size?: number | null;
+	}
+
+	interface CharacterSummary {
+		_id: string;
+		name: string;
+		nickname?: string;
+		avatar_url?: string;
+	}
+
+	interface LorebookSummary {
+		_id: string;
+		title: string;
 	}
 
 	let threads = $state<ChatThread[]>([]);
@@ -24,15 +44,56 @@
 	let renamingId = $state<string | null>(null);
 	let renameText = $state('');
 	let panelOpen = $state(true);
+	let configPanelOpen = $state(false);
+	let characterList = $state<CharacterSummary[]>([]);
+	let lorebookList = $state<LorebookSummary[]>([]);
+	let configListsLoaded = $state(false);
+	let configSaving = $state(false);
+	let chatNameSetting = $state('');
+	let modelSetting = $state('gemini-2.5-flash');
 
 	let messages = $derived(threads.find((t) => t._id === activeChatId)?.messages ?? []);
+	let activeConfig = $derived(threads.find((t) => t._id === activeChatId));
+
+	const aiLabel = $derived.by(() => {
+		const charId = activeConfig?.character_id;
+		if (charId) {
+			const c = characterList.find((ch) => ch._id === charId);
+			if (c) return c.nickname || c.name;
+		}
+		return modelSetting || 'AI';
+	});
+	const userLabel = $derived(chatNameSetting.trim() || 'You');
 	const canRetry = $derived(messages.length > 0 && messages[messages.length - 1]?.role === 'user');
 
 	$effect(() => {
 		untrack(() => {
 			void loadThreads();
+			void loadUserSettings();
 		});
 	});
+
+	async function loadUserSettings(): Promise<void> {
+		try {
+			const res = await fetch('/api/settings');
+			if (!res.ok) return;
+			const s = (await res.json()) as { chat_name?: string; default_provider?: string; gemini_model?: string; chub_model?: string };
+			chatNameSetting = s.chat_name ?? '';
+			modelSetting = s.default_provider === 'chub'
+				? (s.chub_model ?? 'mythomax')
+				: (s.gemini_model ?? 'gemini-2.5-flash');
+		} catch { /* non-fatal */ }
+	}
+
+	async function saveUserSetting(patch: Record<string, unknown>): Promise<void> {
+		try {
+			await fetch('/api/settings', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(patch)
+			});
+		} catch { /* ignore */ }
+	}
 
 	async function loadThreads(): Promise<void> {
 		bootLoading = true;
@@ -42,7 +103,10 @@
 			if (!res.ok) throw new Error('Failed to load chats');
 			const data = (await res.json()) as ChatThread[];
 			threads = data;
-			if (threads.length > 0) {
+			const urlId = get(page).url.searchParams.get('id');
+			if (urlId && threads.find((t) => t._id === urlId)) {
+				selectThread(urlId);
+			} else if (threads.length > 0) {
 				selectThread(threads[0]._id);
 			} else {
 				await createThread();
@@ -183,6 +247,44 @@
 		const updated = current.map((m, i) => (i === idx ? { ...m, content: newContent } : m));
 		threads = threads.map((t) => (t._id === activeChatId ? { ...t, messages: updated } : t));
 		await patchMessages(updated).catch(() => {});
+	}
+
+	async function loadConfigLists(): Promise<void> {
+		if (configListsLoaded) return;
+		try {
+			const [charRes, lbRes] = await Promise.all([
+				fetch('/api/characters'),
+				fetch('/api/lorebooks')
+			]);
+			if (charRes.ok) characterList = (await charRes.json()) as CharacterSummary[];
+			if (lbRes.ok) lorebookList = (await lbRes.json()) as LorebookSummary[];
+			configListsLoaded = true;
+		} catch { /* panel still usable without lists */ }
+	}
+
+	function openConfigPanel(): void {
+		configPanelOpen = true;
+		void loadConfigLists();
+	}
+
+	async function saveConfigField(patch: Record<string, unknown>): Promise<void> {
+		if (!activeChatId || configSaving) return;
+		configSaving = true;
+		try {
+			const res = await fetch(`/api/chats/${activeChatId}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(patch)
+			});
+			if (!res.ok) throw new Error('save failed');
+			// Use the full server response so server-side changes (e.g. seeded greeting) are reflected
+			const updated = (await res.json()) as ChatThread;
+			threads = threads.map((t) =>
+				t._id === activeChatId ? { ...t, ...updated } : t
+			);
+		} catch { /* ignore — user can retry */ } finally {
+			configSaving = false;
+		}
 	}
 
 	async function handleRefreshMessage(idx: number): Promise<void> {
@@ -394,10 +496,36 @@
 			</button>
 		{/if}
 
+		<div class="chat-area-header">
+			{#if activeConfig?.character_id}
+				{@const charName = characterList.find((c) => c._id === activeConfig?.character_id)}
+				<span class="chat-char-badge">
+					{#if charName?.avatar_url}
+						<img src={charName.avatar_url} alt="" class="chat-char-avatar" />
+					{/if}
+					{charName?.nickname || charName?.name || '…'}
+				</span>
+			{/if}
+			<button
+				class="config-toggle-btn"
+				class:active={configPanelOpen}
+				onclick={() => configPanelOpen ? (configPanelOpen = false) : openConfigPanel()}
+				aria-label="Chat settings"
+				title="Chat settings"
+			>
+				<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<circle cx="12" cy="12" r="3" />
+					<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+				</svg>
+			</button>
+		</div>
+
 		<div class="chat-shell">
 			<MessageFeed
 				{messages}
 				showTyping={sending}
+				charName={aiLabel}
+				userName={userLabel}
 				onDeleteMessage={handleDeleteMessage}
 				onEditMessage={handleEditMessage}
 				onRefreshMessage={handleRefreshMessage}
@@ -410,6 +538,137 @@
 		{:else if error}
 			<p class="status-msg error" data-testid="chat-error">{error}</p>
 		{/if}
+	</div>
+
+	<!-- ── Right config panel ──────────────────────────────────────────────── -->
+	<div class="config-panel" class:open={configPanelOpen}>
+		<div class="config-panel-header">
+			<span class="config-panel-title">Chat Settings</span>
+			<button class="config-close-btn" onclick={() => (configPanelOpen = false)} aria-label="Close settings">
+				<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<line x1="18" y1="6" x2="6" y2="18" />
+					<line x1="6" y1="6" x2="18" y2="18" />
+				</svg>
+			</button>
+		</div>
+
+		<div class="config-panel-body">
+			<!-- Your display name -->
+			<div class="config-field">
+				<label for="cfg-chatname" class="config-label">Your Name</label>
+				<input
+					id="cfg-chatname"
+					type="text"
+					class="config-input"
+					placeholder="How you appear in chat (default: You)"
+					maxlength="50"
+					value={chatNameSetting}
+					onblur={(e) => {
+						chatNameSetting = (e.currentTarget as HTMLInputElement).value.trim();
+						void saveUserSetting({ chat_name: chatNameSetting });
+					}}
+				/>
+			</div>
+
+			<!-- Character selector -->
+			<div class="config-field">
+				<label for="cfg-character" class="config-label">Character</label>
+				<select
+					id="cfg-character"
+					class="config-select"
+					value={activeConfig?.character_id ?? ''}
+					onchange={(e) => {
+						const val = (e.currentTarget as HTMLSelectElement).value;
+						void saveConfigField({ character_id: val || null });
+					}}
+				>
+					<option value="">— None —</option>
+					{#each characterList as c (c._id)}
+						<option value={c._id}>{c.nickname || c.name}</option>
+					{/each}
+				</select>
+			</div>
+
+			<!-- Lorebook selector -->
+			<div class="config-field">
+				<label for="cfg-lorebook" class="config-label">Lorebook</label>
+				<select
+					id="cfg-lorebook"
+					class="config-select"
+					value={activeConfig?.lorebook_id ?? ''}
+					onchange={(e) => {
+						const val = (e.currentTarget as HTMLSelectElement).value;
+						void saveConfigField({ lorebook_id: val || null });
+					}}
+				>
+					<option value="">— None —</option>
+					{#each lorebookList as lb (lb._id)}
+						<option value={lb._id}>{lb.title}</option>
+					{/each}
+				</select>
+			</div>
+
+			<!-- System prompt -->
+			<div class="config-field">
+				<label for="cfg-sysprompt" class="config-label">System Prompt</label>
+				<textarea
+					id="cfg-sysprompt"
+					class="config-textarea"
+					rows={5}
+					placeholder="Override the character's system prompt…"
+					value={activeConfig?.system_prompt ?? ''}
+					onblur={(e) => void saveConfigField({ system_prompt: (e.currentTarget as HTMLTextAreaElement).value })}
+				></textarea>
+			</div>
+
+			<!-- Post-history instructions -->
+			<div class="config-field">
+				<label for="cfg-phi" class="config-label">Post-History Instructions</label>
+				<textarea
+					id="cfg-phi"
+					class="config-textarea"
+					rows={3}
+					placeholder="Instructions injected just before your message…"
+					value={activeConfig?.post_history_instructions ?? ''}
+					onblur={(e) => void saveConfigField({ post_history_instructions: (e.currentTarget as HTMLTextAreaElement).value })}
+				></textarea>
+			</div>
+
+			<!-- Assistant prefill -->
+			<div class="config-field">
+				<label for="cfg-prefill" class="config-label">Assistant Prefill</label>
+				<input
+					id="cfg-prefill"
+					type="text"
+					class="config-input"
+					placeholder="Start assistant reply with…"
+					value={activeConfig?.assistant_prefill ?? ''}
+					onblur={(e) => void saveConfigField({ assistant_prefill: (e.currentTarget as HTMLInputElement).value })}
+				/>
+			</div>
+
+			<!-- Context size -->
+			<div class="config-field">
+				<label for="cfg-ctx" class="config-label">Context Size (messages)</label>
+				<input
+					id="cfg-ctx"
+					type="number"
+					class="config-input"
+					placeholder="50"
+					min="1"
+					max="500"
+					value={activeConfig?.context_size ?? ''}
+					onblur={(e) => {
+						const v = (e.currentTarget as HTMLInputElement).value;
+						void saveConfigField({ context_size: v ? parseInt(v, 10) : null });
+					}}
+				/>
+			</div>
+
+			{#if configSaving}
+				<p class="config-saving-indicator">Saving…</p>
+			{/if}
+		</div>
 	</div>
 </section>
 
@@ -623,7 +882,7 @@
 		flex: 1;
 		min-width: 0;
 		display: grid;
-		grid-template-rows: minmax(0, 1fr) auto;
+		grid-template-rows: auto minmax(0, 1fr) auto;
 		gap: 0.5rem;
 		padding: 1rem;
 		position: relative;
@@ -667,5 +926,176 @@
 
 	.status-msg.error {
 		color: #b2294f;
+	}
+
+	/* ── Chat area header ── */
+
+	.chat-area-header {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.5rem;
+		margin-bottom: 0.25rem;
+		flex-shrink: 0;
+	}
+
+	.chat-char-badge {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--text-secondary, #8888aa);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 180px;
+	}
+
+	.chat-char-avatar {
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
+		object-fit: cover;
+		flex-shrink: 0;
+	}
+
+	.config-toggle-btn {
+		margin-left: auto;
+		width: 30px;
+		height: 30px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: var(--radius-sm, 8px);
+		background: transparent;
+		color: var(--text-secondary, #8888aa);
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s;
+	}
+
+	.config-toggle-btn:hover,
+	.config-toggle-btn.active {
+		background: rgba(124, 110, 248, 0.12);
+		color: var(--accent-primary, #7c6ef8);
+	}
+
+	/* ── Right config panel ── */
+
+	.config-panel {
+		width: 0;
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		border-left: 0 solid rgba(255, 255, 255, 0.12);
+		background: rgba(255, 255, 255, 0.03);
+		transition: width 0.22s ease, border-left-width 0.22s ease;
+		overflow: hidden;
+	}
+
+	.config-panel.open {
+		width: 270px;
+		border-left-width: 1px;
+	}
+
+	.config-panel-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.8rem 0.75rem 0.5rem;
+		flex-shrink: 0;
+	}
+
+	.config-panel-title {
+		font-size: 0.78rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-secondary, #8888aa);
+	}
+
+	.config-close-btn {
+		width: 24px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: none;
+		background: none;
+		border-radius: 4px;
+		color: var(--text-secondary, #8888aa);
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+
+	.config-close-btn:hover {
+		background: rgba(0, 0, 0, 0.07);
+	}
+
+	.config-panel-body {
+		flex: 1;
+		overflow-y: auto;
+		padding: 0 0.75rem 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.config-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+
+	.config-label {
+		font-size: 0.76rem;
+		font-weight: 600;
+		color: var(--text-secondary, #8888aa);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	.config-select,
+	.config-input {
+		width: 100%;
+		padding: 0.35rem 0.5rem;
+		border-radius: var(--radius-sm, 8px);
+		border: 1px solid var(--input-border, rgba(0, 0, 0, 0.14));
+		background: var(--bg-input, rgba(255, 255, 255, 0.85));
+		color: var(--text-primary, #1a1a2e);
+		font-size: 0.82rem;
+		outline: none;
+		transition: border-color 0.15s;
+	}
+
+	.config-select:focus,
+	.config-input:focus {
+		border-color: var(--accent-primary, #7c6ef8);
+	}
+
+	.config-textarea {
+		width: 100%;
+		padding: 0.4rem 0.5rem;
+		border-radius: var(--radius-sm, 8px);
+		border: 1px solid var(--input-border, rgba(0, 0, 0, 0.14));
+		background: var(--bg-input, rgba(255, 255, 255, 0.85));
+		color: var(--text-primary, #1a1a2e);
+		font-size: 0.82rem;
+		resize: vertical;
+		outline: none;
+		transition: border-color 0.15s;
+		box-sizing: border-box;
+	}
+
+	.config-textarea:focus {
+		border-color: var(--accent-primary, #7c6ef8);
+	}
+
+	.config-saving-indicator {
+		font-size: 0.76rem;
+		color: var(--text-muted, #a0a0c0);
+		margin: 0;
+		text-align: center;
 	}
 </style>
