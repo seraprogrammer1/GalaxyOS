@@ -10,6 +10,8 @@
 	interface ChatMessage {
 		role: MessageRole;
 		content: string;
+		variants?: { content: string; tail: unknown[] }[];
+		activeVariant?: number;
 	}
 
 	interface ChatThread {
@@ -211,15 +213,8 @@
 				body: JSON.stringify({ content: userContent })
 			});
 			if (!res.ok) throw new Error('Failed to send message');
-			const payload = (await res.json()) as { message?: string };
-			if (payload.message) {
-				const assistantMsg: ChatMessage = { role: 'assistant', content: payload.message };
-				threads = threads.map((t) =>
-					t._id === activeChatId
-						? { ...t, messages: [...(t.messages ?? []), assistantMsg] }
-						: t
-				);
-			}
+			const updated = (await res.json()) as ChatThread;
+			threads = threads.map((t) => (t._id === activeChatId ? { ...t, ...updated } : t));
 		} catch {
 			error = 'Message failed. Please retry.';
 		} finally {
@@ -284,6 +279,47 @@
 			);
 		} catch { /* ignore — user can retry */ } finally {
 			configSaving = false;
+		}
+	}
+
+	let variantGenerating = $state<number | null>(null);
+
+	async function switchVariant(msgIdx: number, delta: -1 | 1): Promise<void> {
+		const thread = threads.find((t) => t._id === activeChatId);
+		if (!thread?.messages) return;
+		const msg = thread.messages[msgIdx];
+		if (!msg?.variants || msg.variants.length === 0) return;
+		const newIndex = Math.max(0, Math.min((msg.activeVariant ?? 0) + delta, msg.variants.length - 1));
+		try {
+			const res = await fetch(`/api/chats/${activeChatId}/messages/${msgIdx}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ activeVariant: newIndex })
+			});
+			if (!res.ok) return;
+			const updated = (await res.json()) as ChatThread;
+			threads = threads.map((t) => (t._id === activeChatId ? { ...t, ...updated } : t));
+		} catch { /* non-fatal */ }
+	}
+
+	async function generateVariant(msgIdx: number): Promise<void> {
+		if (variantGenerating !== null) return;
+		variantGenerating = msgIdx;
+		try {
+			const res = await fetch(`/api/chats/${activeChatId}/messages/${msgIdx}/generate`, {
+				method: 'POST'
+			});
+			if (!res.ok) {
+				const body = await res.json().catch(() => ({})) as { error?: string };
+				error = body.error ?? 'Failed to generate variant.';
+				return;
+			}
+			const updated = (await res.json()) as ChatThread;
+			threads = threads.map((t) => (t._id === activeChatId ? { ...t, ...updated } : t));
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to generate variant.';
+		} finally {
+			variantGenerating = null;
 		}
 	}
 
@@ -526,9 +562,12 @@
 				showTyping={sending}
 				charName={aiLabel}
 				userName={userLabel}
+				generatingVariantIdx={variantGenerating}
 				onDeleteMessage={handleDeleteMessage}
 				onEditMessage={handleEditMessage}
 				onRefreshMessage={handleRefreshMessage}
+				onSwitchVariant={switchVariant}
+				onGenerateVariant={generateVariant}
 			/>
 			<ChatInput disabled={bootLoading || !activeChatId || sending} canRetry={canRetry} onSend={handleSend} />
 		</div>

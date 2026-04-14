@@ -1,16 +1,30 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose';
 
-const messageSchema = new Schema(
+// Forward-declare messageSchema so variantSchema can reference it
+const messageSchema: Schema = new Schema({}, { _id: false });
+
+// A single variant of an assistant message, plus the tail of the conversation
+// that was active when this variant was last in use.
+const variantSchema = new Schema(
 	{
-		role: {
-			type: String,
-			enum: ['user', 'assistant', 'system'],
-			required: true
-		},
-		content: { type: String, required: true }
+		content: { type: String, required: true },
+		tail: { type: [messageSchema], default: [] }
 	},
 	{ _id: false }
 );
+
+// Redefine messageSchema with all fields now that variantSchema exists
+messageSchema.add({
+	role: {
+		type: String,
+		enum: ['user', 'assistant', 'system'],
+		required: true
+	},
+	content: { type: String, required: true },
+	// Only populated on assistant messages — holds all variants + their branch tails
+	variants: { type: [variantSchema], default: [] },
+	activeVariant: { type: Number, default: 0 }
+});
 
 const chatSchema = new Schema(
 	{

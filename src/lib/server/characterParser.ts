@@ -8,6 +8,14 @@
  *   - PNG  (tEXt chunk with keyword "ccv3" (V3) or "chara" (V2))
  */
 
+export type RawLoreEntry = {
+	name?: string;
+	keys: string[];
+	content: string;
+	enabled?: boolean;
+	constant?: boolean;
+};
+
 export type ParsedCharacter = {
 	name: string;
 	nickname: string;
@@ -23,6 +31,8 @@ export type ParsedCharacter = {
 	tags: string[];
 	spec: string;
 	spec_version: string;
+	/** Embedded lorebook from V2/V3 character cards (undefined for V1). */
+	characterBook?: { title?: string; entries: RawLoreEntry[] };
 };
 
 // ── PNG parsing ─────────────────────────────────────────────────────────────
@@ -81,6 +91,30 @@ function normalizeCard(raw: unknown): ParsedCharacter {
 	// Strip decorator tags (@@…) from fields that commonly contain them
 	const clean = (s: string) => s.replace(/^@@[^\n]*/gm, '').trim();
 
+	// Extract embedded character_book for V2/V3 cards
+	let characterBook: ParsedCharacter['characterBook'];
+	if ((isV2 || isV3) && d.character_book && typeof d.character_book === 'object') {
+		const cb = d.character_book as Record<string, unknown>;
+		const rawEntries = Array.isArray(cb.entries) ? (cb.entries as Record<string, unknown>[]) : [];
+		const entries: RawLoreEntry[] = rawEntries
+			.filter((e) => typeof e.content === 'string' && e.content.trim())
+			.map((e) => ({
+				name: typeof e.name === 'string' ? e.name.trim() : undefined,
+				keys: Array.isArray(e.keys)
+					? (e.keys as unknown[]).filter((k): k is string => typeof k === 'string')
+					: [],
+				content: (e.content as string).trim(),
+				enabled: typeof e.enabled === 'boolean' ? e.enabled : true,
+				constant: typeof e.constant === 'boolean' ? e.constant : false
+			}));
+		if (entries.length > 0) {
+			characterBook = {
+				title: typeof cb.name === 'string' ? cb.name.trim() : undefined,
+				entries
+			};
+		}
+	}
+
 	return {
 		name: toStr(d.name),
 		nickname: toStr(d.nickname),
@@ -97,7 +131,8 @@ function normalizeCard(raw: unknown): ParsedCharacter {
 		creator_notes: toStr(d.creator_notes),
 		tags: toStrArr(d.tags),
 		spec: isV3 ? 'chara_card_v3' : isV2 ? 'chara_card_v2' : 'custom',
-		spec_version: toStr(obj.spec_version, '1.0')
+		spec_version: toStr(obj.spec_version, '1.0'),
+		characterBook
 	};
 }
 

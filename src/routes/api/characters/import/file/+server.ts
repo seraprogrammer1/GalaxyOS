@@ -2,6 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { connectDB } from '$lib/server/db';
 import { Character } from '$lib/server/models/Character';
+import { Lorebook } from '$lib/server/models/Lorebook';
 import { parseCharacterFromPng, parseCharacterFromJson } from '$lib/server/characterParser';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -73,6 +74,35 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		source: 'chub',
 		visible: true
 	});
+
+	// Auto-create an embedded lorebook if the card contained a character_book
+	if (characterData.characterBook && characterData.characterBook.entries.length > 0) {
+		try {
+			const mappedEntries = characterData.characterBook.entries.map((e) => ({
+				name: e.name ?? '',
+				keywords: e.keys,
+				content: e.content,
+				enabled: e.enabled ?? true,
+				constant: e.constant ?? false,
+				use_regex: false,
+				position: 'before_char',
+				priority: 100,
+				exclude_keys: [],
+				additional_keys: []
+			}));
+			const lb = await Lorebook.create({
+				owner: locals.session.user_id,
+				title: characterData.characterBook.title || `${characterData.name} Lorebook`,
+				description: 'Imported from character card',
+				entries: mappedEntries,
+				scan_depth: 2,
+				token_budget: 2048,
+				recursive_scanning: false
+			});
+			character.linked_lorebook_id = lb._id;
+			await character.save();
+		} catch { /* lorebook creation failure is non-fatal */ }
+	}
 
 	return json(character.toJSON(), { status: 201 });
 };

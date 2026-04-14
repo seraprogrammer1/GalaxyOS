@@ -89,10 +89,16 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 
 	if (title !== null && title.length > 0) c.title = title;
 	if (rawMessages !== null)
-		c.messages = rawMessages.map((m) => ({
-			role: (m as Record<string, unknown>).role,
-			content: (m as Record<string, unknown>).content
-		}));
+		c.messages = rawMessages.map((m) => {
+			const msg = m as Record<string, unknown>;
+			const mapped: Record<string, unknown> = {
+				role: msg.role,
+				content: msg.content
+			};
+			if (Array.isArray(msg.variants)) mapped.variants = msg.variants;
+			if (typeof msg.activeVariant === 'number') mapped.activeVariant = msg.activeVariant;
+			return mapped;
+		});
 	if (characterId !== undefined) c.character_id = characterId || null;
 
 	// Seed greeting when assigning a character to an empty chat
@@ -104,7 +110,18 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		try {
 			const charDoc = await Character.findById(characterId).lean() as Record<string, unknown> | null;
 			if (charDoc && typeof charDoc.first_message === 'string' && charDoc.first_message.trim()) {
-				c.messages = [{ role: 'assistant', content: charDoc.first_message.trim() }];
+				const firstMsg = charDoc.first_message.trim();
+				const alts = Array.isArray(charDoc.alternate_greetings)
+					? (charDoc.alternate_greetings as unknown[])
+						.filter((g): g is string => typeof g === 'string' && g.trim().length > 0)
+					: [];
+				const allGreetings = [firstMsg, ...alts];
+				c.messages = [{
+					role: 'assistant',
+					content: firstMsg,
+					variants: allGreetings.map((g) => ({ content: g, tail: [] })),
+					activeVariant: 0
+				}];
 			}
 		} catch { /* non-fatal */ }
 	}

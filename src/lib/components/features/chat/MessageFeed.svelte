@@ -7,6 +7,8 @@
 	interface ChatMessage {
 		role: MessageRole;
 		content: string;
+		variants?: { content: string; tail: unknown[] }[];
+		activeVariant?: number;
 	}
 
 	let {
@@ -14,17 +16,23 @@
 		showTyping = false,
 		charName,
 		userName,
+		generatingVariantIdx = null,
 		onDeleteMessage,
 		onEditMessage,
-		onRefreshMessage
+		onRefreshMessage,
+		onSwitchVariant,
+		onGenerateVariant
 	}: {
 		messages?: ChatMessage[];
 		showTyping?: boolean;
 		charName?: string;
 		userName?: string;
+		generatingVariantIdx?: number | null;
 		onDeleteMessage?: (index: number) => void;
 		onEditMessage?: (index: number, newContent: string) => void;
 		onRefreshMessage?: (index: number) => void;
+		onSwitchVariant?: (msgIdx: number, delta: -1 | 1) => void;
+		onGenerateVariant?: (msgIdx: number) => void;
 	} = $props();
 
 	let feedEl: HTMLElement | undefined;
@@ -52,9 +60,14 @@
 				senderName={message.role === 'user' ? (userName ?? 'You') : (charName ?? 'AI')}
 				{charName}
 				{userName}
+				variants={message.variants}
+				activeVariant={message.activeVariant}
+				generatingVariant={generatingVariantIdx === idx}
 				onDelete={onDeleteMessage ? () => onDeleteMessage(idx) : undefined}
 				onEdit={message.role === 'user' && onEditMessage ? (c) => onEditMessage(idx, c) : undefined}
 				onRefresh={message.role !== 'user' && onRefreshMessage ? () => onRefreshMessage(idx) : undefined}
+				onSwitchVariant={message.role === 'assistant' && onSwitchVariant ? (d) => onSwitchVariant(idx, d) : undefined}
+				onGenerateVariant={message.role === 'assistant' && onGenerateVariant ? () => onGenerateVariant(idx) : undefined}
 			/>
 		{/if}
 	{/each}

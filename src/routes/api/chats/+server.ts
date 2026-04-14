@@ -31,9 +31,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	let characterName: string | null = null;
 	let firstMessage: string | null = null;
 	let linkedLorebookId: string | null = null;
+	let character: Awaited<ReturnType<typeof Character.findOne>> | null = null;
 
 	if (characterId) {
-		const character = await Character.findOne({
+		character = await Character.findOne({
 			_id: characterId,
 			owner: locals.session.user_id
 		});
@@ -55,9 +56,25 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			? body.title.trim()
 			: characterName ?? 'New Chat';
 
-	// Seed the messages array with the character greeting if present
-	const messages = firstMessage
-		? [{ role: 'assistant', content: firstMessage }]
+	// Seed the messages array with the character greeting and all alternate_greetings as variants
+	const allGreetings: string[] = [];
+	if (firstMessage) {
+		allGreetings.push(firstMessage);
+		if (character) {
+			const alts = Array.isArray(character.alternate_greetings)
+				? (character.alternate_greetings as unknown[])
+					.filter((g): g is string => typeof g === 'string' && g.trim().length > 0)
+				: [];
+			allGreetings.push(...alts);
+		}
+	}
+	const messages = allGreetings.length > 0
+		? [{
+				role: 'assistant',
+				content: allGreetings[0],
+				variants: allGreetings.map((g) => ({ content: g, tail: [] })),
+				activeVariant: 0
+		  }]
 		: [];
 
 	const chat = await Chat.create({

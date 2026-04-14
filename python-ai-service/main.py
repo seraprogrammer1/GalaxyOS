@@ -73,6 +73,13 @@ async def _call_gemini(messages: list[Message], model: str) -> str:
             gemini_role = "model" if m.role == "assistant" else "user"
             contents.append({"role": gemini_role, "parts": [{"text": m.content}]})
 
+    # Gemini requires the first contents entry to have role 'user'.
+    # Character greetings are 'assistant' turns that appear before any user
+    # message, so insert a silent start marker when that happens.
+    # Also covers the empty-history case (idx=0 variant regeneration).
+    if not contents or contents[0]["role"] != "user":
+        contents.insert(0, {"role": "user", "parts": [{"text": "[Start of story]"}]})
+
     body: dict = {"contents": contents}
     if system_parts:
         body["system_instruction"] = {"parts": system_parts}
@@ -93,13 +100,21 @@ async def _call_gemini(messages: list[Message], model: str) -> str:
 
 async def _call_chub(messages: list[Message], model: str) -> str:
     url = CHUB_URLS.get(model, CHUB_URLS["mythomax"])
-    oai_messages = [{"role": m.role, "content": m.content} for m in messages]
+
+    # OpenAI-compat APIs reject consecutive same-role messages.
+    # Merge them so the conversation always strictly alternates.
+    merged: list[dict] = []
+    for m in messages:
+        if merged and merged[-1]["role"] == m.role:
+            merged[-1]["content"] += "\n\n" + m.content
+        else:
+            merged.append({"role": m.role, "content": m.content})
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         r = await client.post(
             url,
             headers={"Authorization": f"Bearer {CHUB_API_KEY}"},
-            json={"model": model, "messages": oai_messages},
+            json={"model": model, "messages": merged},
         )
 
     if r.status_code != 200:

@@ -11,9 +11,14 @@
 		senderName,
 		charName,
 		userName,
+		variants,
+		activeVariant,
+		generatingVariant = false,
 		onDelete,
 		onEdit,
-		onRefresh
+		onRefresh,
+		onSwitchVariant,
+		onGenerateVariant
 	}: {
 		role: MessageRole;
 		content: string;
@@ -21,10 +26,18 @@
 		senderName?: string;
 		charName?: string;
 		userName?: string;
+		variants?: { content: string; tail: unknown[] }[];
+		activeVariant?: number;
+		generatingVariant?: boolean;
 		onDelete?: () => void;
 		onEdit?: (newContent: string) => void;
 		onRefresh?: () => void;
+		onSwitchVariant?: (delta: -1 | 1) => void;
+		onGenerateVariant?: () => void;
 	} = $props();
+
+	const variantCount = $derived(variants?.length ?? 0);
+	const currentVariant = $derived(activeVariant ?? 0);
 
 	let editing = $state(false);
 	let editContent = $state('');
@@ -97,6 +110,44 @@
 				<p>{displayContent}</p>
 			{:else}
 				<div class="md-body">{@html renderedHtml}</div>
+			{/if}
+
+			{#if role === 'assistant' && variantCount > 0 && !pending}
+				<div class="variant-nav" aria-label="Message variants">
+					<button
+						class="variant-btn"
+						disabled={currentVariant === 0 || generatingVariant}
+						onclick={() => onSwitchVariant?.(-1)}
+						aria-label="Previous variant"
+						title="Previous variant"
+					>
+						<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+					</button>
+					<span class="variant-counter">{currentVariant + 1} / {variantCount}</span>
+					{#if generatingVariant}
+						<span class="variant-spinner" aria-label="Generating…">
+							<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="spin" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+						</span>
+					{:else if currentVariant < variantCount - 1}
+						<button
+							class="variant-btn"
+							onclick={() => onSwitchVariant?.(1)}
+							aria-label="Next variant"
+							title="Next variant"
+						>
+							<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+						</button>
+					{:else}
+						<button
+							class="variant-btn generate-btn"
+							onclick={() => onGenerateVariant?.()}
+							aria-label="Generate new variant"
+							title="Generate new variant"
+						>
+							<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.85"/></svg>
+						</button>
+					{/if}
+				</div>
 			{/if}
 		</article>
 	{/if}
@@ -415,5 +466,72 @@
 
 	.edit-cancel-btn:hover {
 		background: rgba(0, 0, 0, 0.1);
+	}
+
+	/* ── Variant navigation ── */
+
+	.variant-nav {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-top: 0.5rem;
+		padding-top: 0.4rem;
+		border-top: 1px solid rgba(0, 0, 0, 0.06);
+		justify-content: flex-end;
+	}
+
+	.variant-counter {
+		font-size: 0.7rem;
+		color: var(--text-secondary, #8888aa);
+		min-width: 2.4rem;
+		text-align: center;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.variant-btn {
+		width: 20px;
+		height: 20px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 4px;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		background: rgba(255, 255, 255, 0.6);
+		color: var(--text-secondary, #8888aa);
+		cursor: pointer;
+		padding: 0;
+		transition: background 0.12s, color 0.12s;
+	}
+
+	.variant-btn:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.92);
+		color: var(--text-primary, #2d2d3a);
+	}
+
+	.variant-btn:disabled {
+		opacity: 0.3;
+		cursor: default;
+	}
+
+	.variant-btn.generate-btn:hover:not(:disabled) {
+		color: var(--accent-primary, #7c6ef8);
+		border-color: rgba(124, 110, 248, 0.3);
+	}
+
+	.variant-spinner {
+		width: 20px;
+		height: 20px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--accent-primary, #7c6ef8);
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
+	}
+
+	.spin {
+		animation: spin 0.8s linear infinite;
 	}
 </style>
