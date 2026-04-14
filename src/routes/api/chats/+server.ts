@@ -82,7 +82,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		owner: locals.session.user_id,
 		messages,
 		character_id: characterId,
-		lorebook_id: linkedLorebookId
+		lorebook_id: linkedLorebookId,
+		// Default to Chub when starting a chat with a character
+		provider: characterId ? 'chub' : null
 	});
 
 	return json(chat, { status: 201 });

@@ -49,8 +49,14 @@ function buildSystemContent(char: Record<string, unknown> | null, chatSystemProm
 	return parts.join('\n\n');
 }
 
-/** Load AI provider settings from UserSettings. Falls back to defaults. */
-export async function loadProviderConfig(userId: unknown): Promise<ProviderConfig> {
+/**
+ * Load AI provider settings from UserSettings.
+ * Pass chatProvider to override the provider while still using the user's model preferences.
+ */
+export async function loadProviderConfig(
+	userId: unknown,
+	chatProvider?: string | null
+): Promise<ProviderConfig> {
 	let provider = 'gemini';
 	let geminiModel = 'gemini-2.5-flash';
 	let chubModel = 'mythomax';
@@ -63,6 +69,8 @@ export async function loadProviderConfig(userId: unknown): Promise<ProviderConfi
 			if (s.chub_model) chubModel = s.chub_model;
 		}
 	} catch { /* use defaults */ }
+	// Per-chat override takes precedence over user settings (model names still from user settings)
+	if (chatProvider) provider = chatProvider;
 	return { provider, geminiModel, chubModel };
 }
 

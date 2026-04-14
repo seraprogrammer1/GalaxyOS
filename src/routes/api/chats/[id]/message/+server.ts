@@ -34,6 +34,7 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 		post_history_instructions: string;
 		assistant_prefill: string;
 		context_size: number | null;
+		provider: string | null;
 		save: () => Promise<unknown>;
 	};
 
@@ -42,7 +43,7 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 	await chatDoc.save();
 
 	const [providerConfig, character] = await Promise.all([
-		loadProviderConfig(locals.session.user_id),
+		loadProviderConfig(locals.session.user_id, chatDoc.provider),
 		loadCharacter(chatDoc.character_id)
 	]);
 

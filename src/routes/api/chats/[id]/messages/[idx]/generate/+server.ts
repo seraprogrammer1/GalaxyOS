@@ -54,6 +54,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 		post_history_instructions: string;
 		assistant_prefill: string;
 		context_size: number | null;
+		provider: string | null;
 		save: () => Promise<unknown>;
 		markModified: (path: string) => void;
 	};
@@ -82,7 +83,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 	// message). _call_gemini handles the empty-contents + model-first cases itself.
 
 	const [providerConfig, character] = await Promise.all([
-		loadProviderConfig(locals.session.user_id),
+		loadProviderConfig(locals.session.user_id, chatDoc.provider),
 		loadCharacter(chatDoc.character_id)
 	]);
 

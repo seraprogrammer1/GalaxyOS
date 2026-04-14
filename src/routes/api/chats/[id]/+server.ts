@@ -44,6 +44,10 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		body.context_size === null || typeof body.context_size === 'number'
 			? body.context_size
 			: undefined;
+	const provider =
+		'provider' in body
+			? (typeof body.provider === 'string' ? body.provider : null)
+			: undefined;
 
 	const hasAnyField =
 		title !== null ||
@@ -53,7 +57,8 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		systemPrompt !== undefined ||
 		postHistoryInstructions !== undefined ||
 		assistantPrefill !== undefined ||
-		contextSize !== undefined;
+		contextSize !== undefined ||
+		provider !== undefined;
 
 	if (!hasAnyField) {
 		return json({ error: 'No valid fields provided' }, { status: 400 });
@@ -124,12 +129,15 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 				}];
 			}
 		} catch { /* non-fatal */ }
+		// Auto-default to Chub when assigning a character (if no explicit provider set)
+		if (provider === undefined && !c.provider) c.provider = 'chub';
 	}
 	if (lorebookId !== undefined) c.lorebook_id = lorebookId || null;
 	if (systemPrompt !== undefined) c.system_prompt = systemPrompt;
 	if (postHistoryInstructions !== undefined) c.post_history_instructions = postHistoryInstructions;
 	if (assistantPrefill !== undefined) c.assistant_prefill = assistantPrefill;
 	if (contextSize !== undefined) c.context_size = contextSize;
+	if (provider !== undefined) c.provider = provider || null;
 
 	await (chat as { save: () => Promise<unknown> }).save();
 

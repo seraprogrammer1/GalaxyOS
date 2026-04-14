@@ -36,7 +36,9 @@ const chatSchema = new Schema(
 		system_prompt: { type: String, default: '' },
 		post_history_instructions: { type: String, default: '' },
 		assistant_prefill: { type: String, default: '' },
-		context_size: { type: Number, default: null }
+		context_size: { type: Number, default: null },
+		// Per-chat provider override: 'gemini' | 'chub' | null (null = use user settings)
+		provider: { type: String, default: null }
 	},
 	{
 		timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }

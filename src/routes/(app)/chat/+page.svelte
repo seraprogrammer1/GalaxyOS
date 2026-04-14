@@ -24,6 +24,7 @@
 		post_history_instructions?: string;
 		assistant_prefill?: string;
 		context_size?: number | null;
+		provider?: string | null;
 	}
 
 	interface CharacterSummary {
@@ -702,6 +703,24 @@
 						void saveConfigField({ context_size: v ? parseInt(v, 10) : null });
 					}}
 				/>
+			</div>
+
+			<!-- AI Provider -->
+			<div class="config-field">
+				<label for="cfg-provider" class="config-label">AI Provider</label>
+				<select
+					id="cfg-provider"
+					class="config-select"
+					value={activeConfig?.provider ?? ''}
+					onchange={(e) => {
+						const val = (e.currentTarget as HTMLSelectElement).value;
+						void saveConfigField({ provider: val || null });
+					}}
+				>
+					<option value="">— Default (user settings) —</option>
+					<option value="chub">Chub AI (unrestricted)</option>
+					<option value="gemini">Gemini</option>
+				</select>
 			</div>
 
 			{#if configSaving}

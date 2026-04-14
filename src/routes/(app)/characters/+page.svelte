@@ -57,6 +57,15 @@
 	let charSaving = $state(false);
 	let createCharError = $state('');
 
+	// ── AI character generation ──────────────────────────────────────────────
+	let generateDesc = $state('');
+	let generateLorebook = $state(false);
+	let generating = $state(false);
+	let generateError = $state('');
+	let generateExpanded = $state(false);
+	// Lorebook data returned from generation — applied after character is created
+	let pendingLorebook = $state<{ title: string; entries: unknown[] } | null>(null);
+
 	const defaultCharForm = () => ({
 		name: '',
 		nickname: '',
@@ -115,6 +124,72 @@
 		}
 	}
 
+	async function generateCharacter(): Promise<void> {
+		if (!generateDesc.trim() || generating) return;
+		generating = true;
+		generateError = '';
+		pendingLorebook = null;
+		try {
+			const res = await fetch('/api/characters/generate', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					description: generateDesc.trim(),
+					generate_lorebook: generateLorebook
+				})
+			});
+			const data = (await res.json()) as {
+				character?: Record<string, unknown>;
+				lorebook?: { title: string; entries: unknown[] } | null;
+				lorebook_skipped?: boolean;
+				error?: string;
+				stage?: string;
+			};
+			if (!res.ok) {
+				const stageMsg: Record<string, string> = {
+					sanitize: 'Chub AI failed to process the description.',
+					'sanitize-loop': 'AI loop exceeded limit — try simplifying the description.',
+					fill: 'Failed to format character data — try again.',
+					'fill-parse': 'AI returned malformed data — try again.',
+					'fill-unavailable': 'Gemini is overloaded and the fallback also failed — please try again in a moment.',
+					network: 'AI service is unreachable.',
+					input: 'Description is required.'
+				};
+				generateError = stageMsg[data.stage ?? ''] ?? data.error ?? 'Generation failed.';
+				return;
+			}
+			if (!data.character) { generateError = 'No character data returned.'; return; }
+			const c = data.character;
+			charForm = {
+				name: typeof c.name === 'string' ? c.name : '',
+				nickname: typeof c.nickname === 'string' ? c.nickname : '',
+				description: typeof c.description === 'string' ? c.description : '',
+				personality: typeof c.personality === 'string' ? c.personality : '',
+				scenario: typeof c.scenario === 'string' ? c.scenario : '',
+				example_dialogue: typeof c.example_dialogue === 'string' ? c.example_dialogue : '',
+				first_message: typeof c.first_message === 'string' ? c.first_message : '',
+				alternate_greetings: Array.isArray(c.alternate_greetings)
+					? (c.alternate_greetings as string[]).join('\n')
+					: '',
+				system_prompt: typeof c.system_prompt === 'string' ? c.system_prompt : '',
+				post_history_instructions: '',
+				creator_notes: '',
+				tags: Array.isArray(c.tags) ? (c.tags as string[]).join(', ') : '',
+				avatar_url: ''
+			};
+			if (data.lorebook && !data.lorebook_skipped) pendingLorebook = data.lorebook;
+			createCharTab = 'basic';
+			generateExpanded = false;
+			if (data.lorebook_skipped) {
+				createCharError = 'Note: lorebook could not be generated but character data is ready.';
+			}
+		} catch {
+			generateError = 'Unexpected error during generation.';
+		} finally {
+			generating = false;
+		}
+	}
+
 	async function createCharacter(): Promise<void> {
 		if (!charForm.name.trim()) return;
 		charSaving = true;
@@ -137,6 +212,28 @@
 			});
 			if (!res.ok) throw new Error('Failed to create');
 			const created = (await res.json()) as CharacterSummary;
+			// If generation produced a lorebook, create it and link it now
+			if (pendingLorebook) {
+				try {
+					const lbRes = await fetch('/api/lorebooks', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							title: pendingLorebook.title,
+							entries: pendingLorebook.entries
+						})
+					});
+					if (lbRes.ok) {
+						const lb = (await lbRes.json()) as { _id: string };
+						await fetch(`/api/characters/${created._id}`, {
+							method: 'PATCH',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ linked_lorebook_id: lb._id })
+						});
+					}
+				} catch { /* lorebook link is non-fatal */ }
+				pendingLorebook = null;
+			}
 			showCreateChar = false;
 			await goto(`/characters/${created._id}`);
 		} catch {
@@ -310,6 +407,11 @@
 						charForm = defaultCharForm();
 						createCharTab = 'basic';
 						createCharError = '';
+						generateDesc = '';
+						generateLorebook = false;
+						generateError = '';
+						generateExpanded = false;
+						pendingLorebook = null;
 						showCreateChar = true;
 					}}
 				>
@@ -539,6 +641,50 @@
 			<div class="modal-header">
 				<h2>New Character</h2>
 				<button class="modal-close" onclick={() => (showCreateChar = false)}>×</button>
+			</div>
+
+			<!-- ✨ AI Generate panel -->
+			<div class="gen-panel" class:expanded={generateExpanded}>
+				<button
+					class="gen-toggle"
+					onclick={() => (generateExpanded = !generateExpanded)}
+					aria-expanded={generateExpanded}
+				>
+					<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+					Generate with AI
+					<svg class="gen-chevron" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+				</button>
+				{#if generateExpanded}
+					<div class="gen-body">
+						<p class="gen-note">Describe the character in any level of detail — SFW or NSFW. Mature content is sanitised before reaching Gemini.</p>
+						<textarea
+							class="gen-textarea"
+							rows="4"
+							placeholder="e.g. A stoic elven ranger who guards an ancient forest… or a flirtatious vampire noble with a dark secret…"
+							bind:value={generateDesc}
+							disabled={generating}
+						></textarea>
+						<label class="gen-checkbox-label">
+							<input type="checkbox" bind:checked={generateLorebook} disabled={generating} />
+							Also generate a lorebook for this character
+						</label>
+						{#if generateError}
+							<p class="gen-error">{generateError}</p>
+						{/if}
+						<button
+							class="btn-primary gen-btn"
+							onclick={() => void generateCharacter()}
+							disabled={generating || !generateDesc.trim()}
+						>
+							{#if generating}
+								<svg class="gen-spin" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+								Generating…
+							{:else}
+								✨ Generate
+							{/if}
+						</button>
+					</div>
+				{/if}
 			</div>
 
 			<div class="modal-tab-bar">
@@ -1335,6 +1481,113 @@
 
 	.modal-close:hover {
 		background: var(--bg-surface, #f0eef8);
+	}
+
+	/* ✨ Generate panel */
+	.gen-panel {
+		margin: 0.75rem 1.25rem 0;
+		border: 1px solid var(--border, #e0ddf0);
+		border-radius: var(--radius, 12px);
+		overflow: hidden;
+		flex-shrink: 0;
+	}
+
+	.gen-toggle {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		background: var(--bg-surface, #f0eef8);
+		border: none;
+		padding: 0.5rem 0.75rem;
+		cursor: pointer;
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--text-secondary, #6b6b8a);
+		text-align: left;
+		transition: background 0.15s, color 0.15s;
+	}
+
+	.gen-toggle:hover {
+		color: var(--primary, #7c3aed);
+		background: var(--bg-hover, #ece8fa);
+	}
+
+	.gen-chevron {
+		transition: transform 0.2s;
+		opacity: 0.6;
+	}
+
+	.gen-chevron.expanded {
+		transform: rotate(180deg);
+	}
+
+	.gen-body {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		padding: 0.75rem;
+		border-top: 1px solid var(--border, #e0ddf0);
+	}
+
+	.gen-note {
+		font-size: 0.75rem;
+		color: var(--text-muted, #9992b3);
+		margin: 0;
+		line-height: 1.4;
+	}
+
+	.gen-textarea {
+		width: 100%;
+		min-height: 80px;
+		resize: vertical;
+		padding: 0.5rem 0.6rem;
+		border: 1px solid var(--border, #e0ddf0);
+		border-radius: var(--radius-sm, 8px);
+		background: var(--bg-input, #fff);
+		color: var(--text-primary, #2d2d3a);
+		font-size: 0.85rem;
+		font-family: inherit;
+		box-sizing: border-box;
+		transition: border-color 0.15s;
+	}
+
+	.gen-textarea:focus {
+		outline: none;
+		border-color: var(--primary, #7c3aed);
+	}
+
+	.gen-checkbox-label {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.82rem;
+		color: var(--text-secondary, #6b6b8a);
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.gen-error {
+		font-size: 0.78rem;
+		color: var(--error, #dc2626);
+		margin: 0;
+	}
+
+	.gen-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		align-self: flex-start;
+	}
+
+	.gen-spin {
+		animation: gen-spin 0.8s linear infinite;
+	}
+
+	@keyframes gen-spin {
+		from { transform: rotate(0deg); }
+		to   { transform: rotate(360deg); }
 	}
 
 	.modal-tab-bar {
