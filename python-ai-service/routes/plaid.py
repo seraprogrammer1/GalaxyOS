@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import calendar
+import hashlib
 from datetime import datetime, timezone
 from typing import Annotated, Any
 
 from beanie import PydanticObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -14,13 +15,19 @@ from encryption import decrypt_token, encrypt_token
 from models.plaid_item import PlaidItem
 from plaid_client import get_plaid_client
 
+import os
+
 import plaid
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.accounts_balance_get_request import AccountsBalanceGetRequest
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
+from plaid.model.transactions_recurring_get_request import TransactionsRecurringGetRequest
+from plaid.model.investments_holdings_get_request import InvestmentsHoldingsGetRequest
+from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 from plaid.model.item_remove_request import ItemRemoveRequest
+from plaid.model.sandbox_item_fire_webhook_request import SandboxItemFireWebhookRequest
 from plaid.model.products import Products
 from plaid.model.country_code import CountryCode
 
@@ -36,6 +43,7 @@ class ExchangeTokenRequest(BaseModel):
     public_token: str
     institution_name: str = "Unknown Institution"
     institution_id: str = ""
+    products: list[str] = []   # products that were requested during Link
 
 
 # ---------------------------------------------------------------------------
@@ -65,12 +73,26 @@ def _current_month_range() -> tuple[int, int]:
 # POST /api/plaid/create-link-token
 # ---------------------------------------------------------------------------
 
+class CreateLinkTokenRequest(BaseModel):
+    products: list[str] = ["transactions"]
+    webhook_url: str = ""
+
+
 @router.post("/create-link-token")
-async def create_link_token(session: AdminSession) -> dict:
+async def create_link_token(session: AdminSession, body: CreateLinkTokenRequest = CreateLinkTokenRequest()) -> dict:
     client = get_plaid_client()
+    # Validate requested products against known valid ones
+    _valid_products = {"transactions", "investments", "liabilities"}
+    requested = [p for p in body.products if p in _valid_products]
+    if not requested:
+        requested = ["transactions"]
+
+    # Use env webhook URL if the caller didn't supply one
+    webhook = body.webhook_url or os.getenv("PLAID_WEBHOOK_URL", "")
+
     try:
-        request = LinkTokenCreateRequest(
-            products=[Products("transactions")],
+        kwargs: dict = dict(
+            products=[Products(p) for p in requested],
             client_name="GalaxyOS",
             country_codes=[CountryCode("US")],
             language="en",
@@ -78,6 +100,9 @@ async def create_link_token(session: AdminSession) -> dict:
                 client_user_id=str(session.user_id or "admin")
             ),
         )
+        if webhook:
+            kwargs["webhook"] = webhook
+        request = LinkTokenCreateRequest(**kwargs)
         response = client.link_token_create(request)
         return {"link_token": response["link_token"]}
     except Exception as exc:
@@ -106,6 +131,8 @@ async def exchange_token(body: ExchangeTokenRequest, session: AdminSession) -> d
         existing.access_token = encrypt_token(raw_access_token)
         existing.institution_name = body.institution_name
         existing.institution_id = body.institution_id
+        if body.products:
+            existing.products = body.products
         await existing.save()
         return {"status": "updated", "item_id": item_id}
 
@@ -115,6 +142,7 @@ async def exchange_token(body: ExchangeTokenRequest, session: AdminSession) -> d
         item_id=item_id,
         institution_name=body.institution_name,
         institution_id=body.institution_id,
+        products=body.products,
     )
     await item.insert()
     return {"status": "success", "item_id": item_id}
@@ -442,3 +470,282 @@ async def get_budget(session: AdminSession) -> dict:
         "spent": round(total_spent, 2),
         "dailyAllowance": _fmt(daily_allowance),
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /api/plaid/recurring  — subscription & bill tracker
+# ---------------------------------------------------------------------------
+
+@router.get("/recurring")
+async def get_recurring(session: AdminSession) -> dict:
+    items = await PlaidItem.find(
+        PlaidItem.owner == PydanticObjectId(str(session.user_id))
+    ).to_list()
+
+    client = get_plaid_client()
+    all_inflow: list[dict] = []
+    all_outflow: list[dict] = []
+
+    for item in items:
+        try:
+            raw_token = decrypt_token(item.access_token)
+            # recurring/get requires account_ids — fetch them first
+            acct_response = client.accounts_balance_get(
+                AccountsBalanceGetRequest(access_token=raw_token)
+            )
+            account_ids = [a["account_id"] for a in acct_response["accounts"]]
+
+            rec_request = TransactionsRecurringGetRequest(
+                access_token=raw_token,
+                account_ids=account_ids,
+            )
+            response = client.transactions_recurring_get(rec_request)
+
+            for stream in response["inflow_streams"]:
+                all_inflow.append(_serialize_stream(stream, item.institution_name))
+            for stream in response["outflow_streams"]:
+                all_outflow.append(_serialize_stream(stream, item.institution_name))
+
+        except Exception as exc:
+            all_outflow.append({"error": str(exc), "institution_name": item.institution_name})
+
+    # Sort outflows by predicted_next_date ascending (upcoming bills first)
+    all_outflow.sort(key=lambda s: s.get("predicted_next_date") or "")
+
+    return {"inflow_streams": all_inflow, "outflow_streams": all_outflow}
+
+
+def _serialize_stream(stream: dict, institution_name: str) -> dict:
+    return {
+        "stream_id": stream.get("stream_id"),
+        "account_id": stream.get("account_id"),
+        "description": stream.get("description") or stream.get("merchant_name", ""),
+        "merchant_name": stream.get("merchant_name"),
+        "frequency": str(stream.get("frequency", "")),
+        "average_amount": (stream.get("average_amount") or {}).get("amount"),
+        "last_amount": (stream.get("last_amount") or {}).get("amount"),
+        "last_date": str(stream.get("last_date", "")),
+        "predicted_next_date": str(stream.get("predicted_next_date", "")),
+        "status": str(stream.get("status", "")),
+        "is_active": stream.get("is_active", True),
+        "category": (stream.get("personal_finance_category") or {}).get("primary", ""),
+        "institution_name": institution_name,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /api/plaid/investments  — portfolio holdings
+# ---------------------------------------------------------------------------
+
+@router.get("/investments")
+async def get_investments(session: AdminSession) -> dict:
+    items = await PlaidItem.find(
+        PlaidItem.owner == PydanticObjectId(str(session.user_id))
+    ).to_list()
+
+    client = get_plaid_client()
+    all_holdings: list[dict] = []
+    total_value: float = 0.0
+
+    for item in items:
+        try:
+            raw_token = decrypt_token(item.access_token)
+            response = client.investments_holdings_get(
+                InvestmentsHoldingsGetRequest(access_token=raw_token)
+            )
+
+            # Build a security lookup by security_id → security details
+            securities: dict[str, dict] = {
+                sec["security_id"]: sec
+                for sec in response["securities"]
+            }
+
+            for holding in response["holdings"]:
+                sec_id = holding.get("security_id", "")
+                sec = securities.get(sec_id, {})
+                quantity = float(holding.get("quantity") or 0)
+                inst_price = float(holding.get("institution_price") or 0)
+                market_value = round(quantity * inst_price, 2)
+                total_value += market_value
+
+                all_holdings.append({
+                    "account_id": holding.get("account_id"),
+                    "security_id": sec_id,
+                    "name": sec.get("name") or sec.get("ticker_symbol", "Unknown"),
+                    "ticker": sec.get("ticker_symbol"),
+                    "type": str(sec.get("type", "")),
+                    "quantity": quantity,
+                    "institution_price": inst_price,
+                    "market_value": market_value,
+                    "cost_basis": holding.get("cost_basis"),
+                    "currency": holding.get("iso_currency_code", "USD"),
+                    "institution_name": item.institution_name,
+                })
+
+        except Exception as exc:
+            all_holdings.append({"error": str(exc), "institution_name": item.institution_name})
+
+    # Sort by market value descending (largest positions first)
+    all_holdings.sort(key=lambda h: -(h.get("market_value") or 0))
+
+    return {"holdings": all_holdings, "total_value": round(total_value, 2)}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/plaid/liabilities  — credit cards, loans, student debt
+# ---------------------------------------------------------------------------
+
+@router.get("/liabilities")
+async def get_liabilities(session: AdminSession) -> dict:
+    items = await PlaidItem.find(
+        PlaidItem.owner == PydanticObjectId(str(session.user_id))
+    ).to_list()
+
+    client = get_plaid_client()
+    credit_cards: list[dict] = []
+    student_loans: list[dict] = []
+    mortgages: list[dict] = []
+    total_debt: float = 0.0
+
+    for item in items:
+        try:
+            raw_token = decrypt_token(item.access_token)
+            response = client.liabilities_get(
+                LiabilitiesGetRequest(access_token=raw_token)
+            )
+            liabilities = response["liabilities"]
+
+            # Build account_id → name lookup
+            acct_map: dict[str, str] = {
+                a["account_id"]: a.get("name", "Unknown")
+                for a in response["accounts"]
+            }
+
+            for cc in (liabilities.get("credit") or []):
+                balance = float(cc.get("last_statement_balance") or 0)
+                total_debt += balance
+                credit_cards.append({
+                    "account_id": cc.get("account_id"),
+                    "account_name": acct_map.get(cc.get("account_id", ""), "Unknown"),
+                    "last_statement_balance": balance,
+                    "minimum_payment_amount": cc.get("minimum_payment_amount"),
+                    "next_payment_due_date": str(cc.get("next_payment_due_date", "")),
+                    "aprs": [
+                        {
+                            "type": str(apr.get("apr_type", "")),
+                            "percentage": apr.get("apr_percentage"),
+                            "balance": apr.get("balance_subject_to_apr"),
+                        }
+                        for apr in (cc.get("aprs") or [])
+                    ],
+                    "institution_name": item.institution_name,
+                })
+
+            for loan in (liabilities.get("student") or []):
+                balance = float(loan.get("outstanding_interest_amount") or 0) + \
+                          float(loan.get("origination_principal_amount") or 0)
+                total_debt += balance
+                student_loans.append({
+                    "account_id": loan.get("account_id"),
+                    "account_name": acct_map.get(loan.get("account_id", ""), "Unknown"),
+                    "loan_name": loan.get("loan_name"),
+                    "servicer_address": loan.get("servicer_address"),
+                    "interest_rate": (loan.get("interest_rate_percentage")),
+                    "outstanding_interest": loan.get("outstanding_interest_amount"),
+                    "origination_principal": loan.get("origination_principal_amount"),
+                    "next_payment_due_date": str(loan.get("next_payment_due_date", "")),
+                    "minimum_payment_amount": loan.get("minimum_payment_amount"),
+                    "institution_name": item.institution_name,
+                })
+
+            for mort in (liabilities.get("mortgage") or []):
+                balance = float(mort.get("outstanding_principal_balance") or 0)
+                total_debt += balance
+                mortgages.append({
+                    "account_id": mort.get("account_id"),
+                    "account_name": acct_map.get(mort.get("account_id", ""), "Unknown"),
+                    "loan_type": mort.get("loan_type_description"),
+                    "interest_rate": (mort.get("interest_rate") or {}).get("percentage"),
+                    "outstanding_principal": mort.get("outstanding_principal_balance"),
+                    "next_monthly_payment": mort.get("next_monthly_payment"),
+                    "next_payment_due_date": str(mort.get("next_due_date", "")),
+                    "origination_principal": mort.get("origination_principal_amount"),
+                    "institution_name": item.institution_name,
+                })
+
+        except Exception as exc:
+            credit_cards.append({"error": str(exc), "institution_name": item.institution_name})
+
+    return {
+        "credit_cards": credit_cards,
+        "student_loans": student_loans,
+        "mortgages": mortgages,
+        "total_debt": round(total_debt, 2),
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/plaid/webhook  — receive Plaid webhook events
+# ---------------------------------------------------------------------------
+
+@router.post("/webhook")
+async def plaid_webhook(request: Request) -> dict:
+    """
+    Receives Plaid webhook events. On SYNC_UPDATES_AVAILABLE, clears the
+    stored cursor for the affected item so the next /transactions call
+    fetches fresh data.
+
+    Plaid signs webhooks with a JWT — in production you should verify this.
+    For sandbox, we trust the payload directly.
+    """
+    try:
+        payload: dict = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    webhook_type = payload.get("webhook_type", "")
+    webhook_code = payload.get("webhook_code", "")
+    item_id = payload.get("item_id", "")
+
+    if webhook_type == "TRANSACTIONS":
+        if webhook_code in ("SYNC_UPDATES_AVAILABLE", "DEFAULT_UPDATE"):
+            # Clear cursor so next /transactions or /budget fetch pulls fresh data
+            item = await PlaidItem.find_one(PlaidItem.item_id == item_id)
+            if item:
+                item.cursor = None
+                await item.save()
+
+    return {"received": True, "webhook_type": webhook_type, "webhook_code": webhook_code}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/plaid/sandbox/fire-webhook  — manually trigger a Plaid webhook
+# ---------------------------------------------------------------------------
+
+class FireWebhookRequest(BaseModel):
+    item_id: str
+    webhook_code: str = "SYNC_UPDATES_AVAILABLE"
+
+
+@router.post("/sandbox/fire-webhook")
+async def fire_sandbox_webhook(body: FireWebhookRequest, session: AdminSession) -> dict:
+    """Fires a sandbox webhook for the given item_id to test end-to-end webhook handling."""
+    item = await PlaidItem.find_one(
+        PlaidItem.item_id == body.item_id,
+        PlaidItem.owner == PydanticObjectId(str(session.user_id)),
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    client = get_plaid_client()
+    try:
+        raw_token = decrypt_token(item.access_token)
+        response = client.sandbox_item_fire_webhook(
+            SandboxItemFireWebhookRequest(
+                access_token=raw_token,
+                webhook_code=body.webhook_code,
+            )
+        )
+        return {"fired": response.get("webhook_fired", True)}
+    except Exception as exc:
+        return _plaid_error(exc)

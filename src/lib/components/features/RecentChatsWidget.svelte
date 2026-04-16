@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
+
 	interface ChatThread {
 		id: string;
 		name: string;
@@ -7,31 +9,53 @@
 		unread: number;
 	}
 
-	let {
-		threads = [
-			{
-				id: '1',
-				name: 'System Prompt Assistant',
-				lastMessage: 'Your prompt has been optimized.',
-				time: '2m ago',
-				unread: 2
-			},
-			{
-				id: '2',
-				name: 'Zillow Scraper Bot',
-				lastMessage: 'Found 14 new listings in Austin.',
-				time: '15m ago',
+	// threads prop is for Storybook / unit tests only.
+	// When not provided (dashboard), the widget self-fetches.
+	let { threads: propThreads }: { threads?: ChatThread[] } = $props();
+
+	let fetchedThreads = $state<ChatThread[]>([]);
+	let loading = $state(false);
+
+	const threads = $derived(propThreads ?? fetchedThreads);
+
+	function relativeTime(dateStr: string | null): string {
+		if (!dateStr) return '';
+		const diff = Date.now() - new Date(dateStr).getTime();
+		if (diff < 60_000) return 'just now';
+		if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+		if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+		return `${Math.floor(diff / 86_400_000)}d ago`;
+	}
+
+	async function fetchRecentChats() {
+		loading = true;
+		try {
+			const res = await fetch('/api/chats?recent=5');
+			if (!res.ok) return;
+			const data = (await res.json()) as Array<{
+				id: string;
+				title: string;
+				lastMessage: string;
+				updatedAt: string | null;
+			}>;
+			fetchedThreads = data.map((c) => ({
+				id: c.id,
+				name: c.title,
+				lastMessage: c.lastMessage || 'No messages yet.',
+				time: relativeTime(c.updatedAt),
 				unread: 0
-			},
-			{
-				id: '3',
-				name: 'Code Review Agent',
-				lastMessage: 'PR #42 looks good to merge.',
-				time: '1h ago',
-				unread: 1
-			}
-		]
-	}: { threads?: ChatThread[] } = $props();
+			}));
+		} catch {
+			// silently fall back to empty
+		} finally {
+			loading = false;
+		}
+	}
+
+	$effect(() => {
+		if (propThreads !== undefined) return;
+		untrack(() => void fetchRecentChats());
+	});
 </script>
 
 <section class="chats-widget glass" data-testid="recent-chats-widget">
@@ -40,7 +64,9 @@
 		<a href="/chat" class="view-all">View All</a>
 	</div>
 
-	{#if threads.length === 0}
+	{#if loading}
+		<p class="state-msg">Loading…</p>
+	{:else if threads.length === 0}
 		<p class="state-msg empty">No chats yet.</p>
 	{:else}
 		<ul class="chat-list">

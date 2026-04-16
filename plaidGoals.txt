@@ -1,0 +1,36 @@
+1. Test "Dynamic" Transaction Updates
+Handling transactions that change state (like a restaurant charge that goes from "pending" to "posted" with a tip added) is the hardest part of building a budget app.
+
+What to do: Log into the Sandbox widget using the username user_transactions_dynamic and the password pass_good.
+
+Why it matters: This specific test persona simulates a live account. You can make an API call to refresh the transactions, and Plaid will simulate pending transactions converting to posted ones. This allows you to verify that your /transactions/sync cursor loop properly handles the modified and removed arrays without duplicating entries in your database.
+
+2. Build Your Subscription & Bill Tracker
+Plaid has a powerful endpoint for detecting recurring charges, which is amazing for a personal dashboard.
+
+What to do: Use the test personas user_yuppie or user_small_business (with pass_good) to link an account. These personas come pre-seeded with months of realistic, recurring activity.
+
+Why it matters: Call the /transactions/recurring/get endpoint on these accounts. You can write the UI logic to map out the inflow_streams (fake paychecks) and outflow_streams (fake Netflix/utility bills). You can test extracting the predicted_next_date so your dashboard can warn you about upcoming bills.
+
+3. Simulate Your Investment Portfolio
+If you have a 401k, IRA, or brokerage account, you will want to track those assets for your net worth.
+
+What to do: Plaid allows you to use a "Custom Sandbox User" specifically for investments. You can pass it real-world stock ticker symbols, and Plaid will automatically generate fake quantities and holdings based on real market data.
+
+Why it matters: Investment APIs are structured differently than cash accounts. This lets you practice parsing the /investments/holdings/get endpoint to multiply your quantity of shares by the institution_price to accurately calculate your total portfolio value.
+
+4. Map Out Your Debt and Liabilities
+To calculate your true net worth, you need your debt.
+
+What to do: Link an account with the standard user_good credentials, but make sure your Link token requests the liabilities product.
+
+Why it matters: The /liabilities/get endpoint returns deeply nested JSON. You can practice writing the backend logic to extract your credit card apr_percentage, your minimum_payment_amount, and your next_payment_due_date. This ensures your UI is ready to render your real credit card burn rates later.
+
+5. Manually Trigger Webhooks
+You don't want to have to manually click a "Sync" button every time you open your app.
+
+What to do: Use the /sandbox/item/fire_webhook endpoint to artificially fire a SYNC_UPDATES_AVAILABLE webhook at your FastAPI backend.
+
+Why it matters: This proves that your application can sit quietly in the background, receive a ping from Plaid, and automatically go fetch new transaction data and update your net worth without any human interaction.
+
+Once you have these 5 things working smoothly with the fake Sandbox data, you are ready to flip your environment variables from sandbox to production (using the Limited Production free tier) to connect your actual bank accounts and see your real net worth.

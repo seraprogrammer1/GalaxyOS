@@ -10,6 +10,7 @@ class PlaidItem(Document):
     institution_name: str
     institution_id: str
     cursor: Optional[str] = None  # Plaid transaction sync cursor
+    products: list[str] = []     # products this item was linked with
 
     class Settings:
         name = "plaid_items"

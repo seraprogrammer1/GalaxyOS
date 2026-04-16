@@ -4,12 +4,38 @@ import { Chat } from '$lib/server/models/Chat';
 import { Character } from '$lib/server/models/Character';
 import type { RequestHandler } from '@sveltejs/kit';
 
-export const GET: RequestHandler = async ({ locals }) => {
+export const GET: RequestHandler = async ({ locals, url }) => {
 	if (!locals.session) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
 	await connectDB();
+
+	// ?recent=N — lean summary for the RecentChatsWidget (sorted newest first)
+	const recentParam = url.searchParams.get('recent');
+	if (recentParam !== null) {
+		const limit = Math.min(Math.max(parseInt(recentParam, 10) || 5, 1), 20);
+		const chats = await Chat.find(
+			{ owner: locals.session.user_id },
+			{ title: 1, updated_at: 1, messages: { $slice: -1 } }
+		)
+			.sort({ updated_at: -1 })
+			.limit(limit)
+			.lean();
+
+		const summary = chats.map((c) => {
+			const lastMsg = Array.isArray(c.messages) && c.messages.length > 0
+				? String((c.messages[0] as Record<string, unknown>).content ?? '')
+				: '';
+			return {
+				id: String(c._id),
+				title: String(c.title),
+				lastMessage: lastMsg.length > 80 ? lastMsg.slice(0, 80) + '…' : lastMsg,
+				updatedAt: c.updated_at ?? null
+			};
+		});
+		return json(summary);
+	}
 
 	const chats = await Chat.find({ owner: locals.session.user_id });
 	return json(chats);
