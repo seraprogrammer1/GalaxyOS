@@ -1,5 +1,6 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import { goto } from '$app/navigation';
+	import { expandAtShortcut } from '$lib/utils/expandShortcuts';
 
 	type CharacterSummary = {
 		_id: string;
@@ -121,6 +122,17 @@
 			lbError = 'Unable to load lorebooks.';
 		} finally {
 			lbLoading = false;
+		}
+	}
+
+	type CharFormKey = keyof ReturnType<typeof defaultCharForm>;
+
+	/** Expand @c / @u shortcuts in character create form textarea fields. */
+	function onCharKeydown(field: CharFormKey, e: KeyboardEvent): void {
+		const result = expandAtShortcut(charForm[field], e.key);
+		if (result) {
+			e.preventDefault();
+			charForm[field] = result.newContent + result.insert;
 		}
 	}
 
@@ -717,12 +729,14 @@
 					<div class="form-row">
 						<label for="char-creator-notes">Creator Notes <small>not shown to AI</small></label>
 						<textarea id="char-creator-notes" bind:value={charForm.creator_notes} rows="2" placeholder="Private notes…"
+							onkeydown={(e) => onCharKeydown('creator_notes', e)}
 						></textarea>
 					</div>
 				{:else if createCharTab === 'persona'}
 					<div class="form-row">
 						<label for="char-description">Description</label>
 						<textarea id="char-description" bind:value={charForm.description} rows="5" placeholder="Appearance, background…"
+							onkeydown={(e) => onCharKeydown('description', e)}
 						></textarea>
 					</div>
 					<div class="form-row">
@@ -732,6 +746,7 @@
 							bind:value={charForm.personality}
 							rows="4"
 							placeholder="Traits, quirks, speech style…"
+							onkeydown={(e) => onCharKeydown('personality', e)}
 						></textarea>
 					</div>
 					<div class="form-row">
@@ -741,6 +756,7 @@
 							bind:value={charForm.scenario}
 							rows="3"
 							placeholder="Setting, current situation…"
+							onkeydown={(e) => onCharKeydown('scenario', e)}
 						></textarea>
 					</div>
 				{:else if createCharTab === 'dialogue'}
@@ -751,6 +767,7 @@
 							bind:value={charForm.first_message}
 							rows="4"
 							placeholder="Character's opening message…"
+							onkeydown={(e) => onCharKeydown('first_message', e)}
 						></textarea>
 					</div>
 					<div class="form-row">
@@ -760,6 +777,7 @@
 							bind:value={charForm.alternate_greetings}
 							rows="4"
 							placeholder="Alternative greeting…&#10;Another variant…"
+							onkeydown={(e) => onCharKeydown('alternate_greetings', e)}
 						></textarea>
 					</div>
 					<div class="form-row">
@@ -769,6 +787,7 @@
 							bind:value={charForm.example_dialogue}
 							rows="5"
 							placeholder={'<START>\n{{user}}: Hello\n{{char}}: Hi there!'}
+							onkeydown={(e) => onCharKeydown('example_dialogue', e)}
 						></textarea>
 					</div>
 				{:else if createCharTab === 'prompts'}
@@ -779,6 +798,7 @@
 							bind:value={charForm.system_prompt}
 							rows="4"
 							placeholder="Overrides the global system prompt for this character…"
+							onkeydown={(e) => onCharKeydown('system_prompt', e)}
 						></textarea>
 					</div>
 					<div class="form-row">
@@ -788,6 +808,7 @@
 							bind:value={charForm.post_history_instructions}
 							rows="3"
 							placeholder="Injected just before the AI response…"
+							onkeydown={(e) => onCharKeydown('post_history_instructions', e)}
 						></textarea>
 					</div>
 				{/if}

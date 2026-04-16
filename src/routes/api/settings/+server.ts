@@ -27,7 +27,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 				chat_name: ''
 			}
 		},
-		{ upsert: true, new: true }
+		{ upsert: true, returnDocument: 'after' }
 	);
 
 	return json(settings);
@@ -88,7 +88,7 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 	const settings = await UserSettings.findOneAndUpdate(
 		{ user_id: locals.session.user_id },
 		{ $set: allowedUpdate },
-		{ upsert: true, new: true }
+		{ upsert: true, returnDocument: 'after' }
 	);
 
 	return json(settings);

@@ -60,7 +60,7 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 	const updated = await Lorebook.findOneAndUpdate(
 		{ _id: params.id },
 		{ $set: update },
-		{ new: true }
+		{ returnDocument: 'after' }
 	);
 
 	return json(updated);

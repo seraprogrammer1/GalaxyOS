@@ -2,6 +2,7 @@ import os
 import json as _json
 import re
 import httpx
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -102,7 +103,20 @@ class CharGenRequest(BaseModel):
     gemini_model: str = "gemini-2.5-flash"
 
 
-app = FastAPI(title="Galaxy OS AI Core")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from db import connect_db, close_db
+    from models.plaid_item import PlaidItem
+    from models.session import Session
+    await connect_db([PlaidItem, Session])
+    yield
+    await close_db()
+
+
+app = FastAPI(title="Galaxy OS AI Core", lifespan=lifespan)
+
+from routes.plaid import router as plaid_router
+app.include_router(plaid_router)
 
 
 @app.get("/health")

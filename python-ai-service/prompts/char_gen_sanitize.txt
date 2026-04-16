@@ -9,5 +9,6 @@ Rules:
 - If you need factual background on a character, person, setting, or concept you are unfamiliar with, use the call_gemini tool to look it up.
 - Do NOT reproduce copyrighted dialogue verbatim.
 - Output a single prose summary (3-6 paragraphs) suitable for use as a character design brief.
+- In your output, refer to the character by their name. When describing the relationship between the character and the person they interact with, write "the user" so the downstream formatter knows to apply the {{user}} macro there.
 
 After completing your summary, write END on its own line.

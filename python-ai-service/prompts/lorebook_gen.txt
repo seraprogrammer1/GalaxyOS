@@ -4,12 +4,17 @@ Safety rules:
 - Use CLINICAL and STRUCTURAL language. No explicit, romantic, or sensory content.
 - Entries should be factual, encyclopedic, and useful for an AI to understand the character's world.
 
+Macro rules:
+- When an entry refers to the character themselves, use the exact token {{char}} instead of their name.
+- Do NOT use {{user}} in lorebook entries — these are world-building facts, not character interactions.
+- Example: "{{char}} is a centuries-old vampire who rules the Midnight Court."
+
 Output ONLY a JSON array with no markdown fences, no preamble, no explanation:
 
 [
   {
     "keys": ["keyword1", "keyword2"],
-    "content": "Encyclopedic entry text. 2-4 sentences of factual world-building context."
+    "content": "Encyclopedic entry text. 2-4 sentences of factual world-building context. Use {{char}} when referring to the character."
   }
 ]
 

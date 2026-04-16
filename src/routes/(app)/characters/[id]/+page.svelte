@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { expandAtShortcut } from '$lib/utils/expandShortcuts';
 
 	type Character = {
 		_id: string;
@@ -173,6 +174,25 @@
 		}
 	}
 
+	type EditTextareaKey =
+		| 'description'
+		| 'personality'
+		| 'scenario'
+		| 'example_dialogue'
+		| 'first_message'
+		| 'altGreetingsStr'
+		| 'system_prompt'
+		| 'post_history_instructions'
+		| 'creator_notes';
+
+	function onEditKeydown(field: EditTextareaKey, e: KeyboardEvent): void {
+		const result = expandAtShortcut(editForm[field], e.key);
+		if (result) {
+			e.preventDefault();
+			editForm[field] = result.newContent + result.insert;
+		}
+	}
+
 	async function startChat(): Promise<void> {
 		if (!char) return;
 		startingChat = true;
@@ -334,6 +354,7 @@
 								bind:value={editForm.description}
 								rows="9"
 								placeholder="Physical appearance, background, backstory…"
+								onkeydown={(e) => onEditKeydown('description', e)}
 							></textarea>
 						{:else}
 							<div class="text-block">{char.description || 'No description.'}</div>
@@ -345,6 +366,7 @@
 								bind:value={editForm.personality}
 								rows="9"
 								placeholder="Traits, quirks, speech style, mannerisms…"
+								onkeydown={(e) => onEditKeydown('personality', e)}
 							></textarea>
 						{:else}
 							<div class="text-block">{char.personality || 'No personality defined.'}</div>
@@ -356,6 +378,7 @@
 								bind:value={editForm.scenario}
 								rows="6"
 								placeholder="Setting, context, current situation…"
+								onkeydown={(e) => onEditKeydown('scenario', e)}
 							></textarea>
 						{:else}
 							<div class="text-block">{char.scenario || 'No scenario defined.'}</div>
@@ -367,6 +390,7 @@
 								bind:value={editForm.example_dialogue}
 								rows="10"
 								placeholder={'<START>\n{{user}}: Hello\n{{char}}: Hi there!'}
+								onkeydown={(e) => onEditKeydown('example_dialogue', e)}
 							></textarea>
 						{:else}
 							<pre class="text-block mono">{char.example_dialogue || 'No example dialogue.'}</pre>
@@ -380,6 +404,7 @@
 									bind:value={editForm.first_message}
 									rows="4"
 									placeholder="Character's opening message…"
+								onkeydown={(e) => onEditKeydown('first_message', e)}
 								></textarea>
 							{:else}
 								<div class="text-block greeting-block">
@@ -394,6 +419,7 @@
 										bind:value={editForm.altGreetingsStr}
 										rows="5"
 										placeholder="Alternative greeting…&#10;Another variant…"
+								onkeydown={(e) => onEditKeydown('altGreetingsStr', e)}
 									></textarea>
 								{:else}
 									{#each char.alternate_greetings as g, i}
@@ -414,6 +440,7 @@
 									bind:value={editForm.system_prompt}
 									rows="5"
 									placeholder="Overrides the global system prompt for this character…"
+								onkeydown={(e) => onEditKeydown('system_prompt', e)}
 								></textarea>
 							{:else}
 								<div class="text-block">
@@ -427,6 +454,7 @@
 									bind:value={editForm.post_history_instructions}
 									rows="3"
 									placeholder="Injected just before AI response…"
+								onkeydown={(e) => onEditKeydown('post_history_instructions', e)}
 								></textarea>
 							{:else}
 								<div class="text-block">{char.post_history_instructions || 'None.'}</div>
@@ -439,6 +467,7 @@
 										bind:value={editForm.creator_notes}
 										rows="3"
 										placeholder="Private notes about this character…"
+								onkeydown={(e) => onEditKeydown('creator_notes', e)}
 									></textarea>
 								{:else}
 									<div class="text-block creator-notes">{char.creator_notes}</div>

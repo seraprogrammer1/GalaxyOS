@@ -1,0 +1,122 @@
+Plaid Integration Blueprint for GalaxyOS (Admin-Only)Plaid acts as a bridge between your app and your bank. You never touch the bank login credentials; Plaid handles that securely and just hands you an access_token to read your data.Here are the 5 actionable steps to get this working.1. Get Your Plaid API KeysGoal: Tell Plaid who you are and get the keys to the castle.Action: 1. Go to dashboard.plaid.com and sign up for a free developer account.2. Go to Team Settings > Keys.3. Copy your client_id and the secret for the Sandbox environment (Sandbox is completely free and uses fake bank credentials for testing like user_good / pass_good).4. Add these to your backend .env file:env PLAID_CLIENT_ID=your_client_id_here PLAID_SECRET_SANDBOX=your_sandbox_secret_here PLAID_ENV=sandbox 2. Update Your MongoDB Models (Backend)Goal: You need a secure place to store the access_token Plaid gives you for your bank account.Action: Add a new Beanie model in your models.py file. Since this is admin-only, you can tie it directly to your User model.# In models.py
+from beanie import Document, Link
+from pydantic import Field
+
+class PlaidItem(Document):
+    owner: Link["User"]
+    access_token: str # The golden ticket to fetch data
+    item_id: str      # Plaid's ID for this specific bank connection
+    institution_name: str # e.g., "Chase", "Bank of America"
+    
+    class Settings:
+        name = "plaid_items"
+3. Install and Configure Plaid in FastAPI (Backend)Goal: Create the two endpoints required to do the "Plaid Handshake".Action: 1. Run pip install plaid-python.2. Create two endpoints in your Python app:* /api/plaid/create-link-token: Plaid needs a temporary token just to open the UI popup.* /api/plaid/exchange-public-token: After you log into your bank in the UI, Plaid gives the frontend a public_token. You send this to the backend, which trades it for the permanent access_token.# In your fastapi router (e.g., routes/plaid.py)
+import plaid
+from plaid.api import plaid_api
+from plaid.model.products import Products
+from plaid.model.country_code import CountryCode
+from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
+from plaid.model.link_token_create_request import LinkTokenCreateRequest
+from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
+
+# 1. Setup Client
+configuration = plaid.Configuration(
+    host=plaid.Environment.Sandbox,
+    api_key={
+        'clientId': os.getenv('PLAID_CLIENT_ID'),
+        'secret': os.getenv('PLAID_SECRET_SANDBOX'),
+    }
+)
+api_client = plaid.ApiClient(configuration)
+client = plaid_api.PlaidApi(api_client)
+
+# 2. Create Link Token (Frontend calls this to start)
+@router.post("/create-link-token")
+async def create_link_token(user: User = Depends(get_current_session)): # Protect this!
+    request = LinkTokenCreateRequest(
+        products=[Products("transactions")], # or "auth", "investments"
+        client_name="GalaxyOS",
+        country_codes=[CountryCode("US")],
+        language="en",
+        user=LinkTokenCreateRequestUser(client_user_id=str(user.id))
+    )
+    response = client.link_token_create(request)
+    return {"link_token": response['link_token']}
+
+# 3. Exchange Token (Frontend calls this after logging into the bank)
+@router.post("/exchange-public-token")
+async def exchange_public_token(public_token: str, user: User = Depends(get_current_session)):
+    exchange_request = ItemPublicTokenExchangeRequest(public_token=public_token)
+    exchange_response = client.item_public_token_exchange(exchange_request)
+    
+    access_token = exchange_response['access_token']
+    item_id = exchange_response['item_id']
+    
+    # Save to MongoDB
+    new_item = PlaidItem(owner=user, access_token=access_token, item_id=item_id, institution_name="My Bank")
+    await new_item.insert()
+    
+    return {"status": "success", "message": "Bank linked successfully!"}
+4. Build the SvelteKit UI (Frontend)Goal: Show the Plaid popup so you can log in to your bank.Action: Add the Plaid script to your app and create a button component.In your app.html or SvelteKit <svelte:head>, add:<script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>Then create an admin-only button component (PlaidLink.svelte):<script>
+    import { onMount } from 'svelte';
+
+    let linkHandler = null;
+
+    async function initializePlaid() {
+        // 1. Get the temporary token from your backend
+        const response = await fetch('/api/plaid/create-link-token', { method: 'POST' });
+        const { link_token } = await response.json();
+
+        // 2. Setup the Plaid UI
+        linkHandler = Plaid.create({
+            token: link_token,
+            onSuccess: async (public_token, metadata) => {
+                // 3. Send the public token to your backend to save it
+                await fetch('/api/plaid/exchange-public-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ public_token })
+                });
+                alert('Bank linked!');
+            },
+            onExit: (err, metadata) => {
+                if (err) console.error(err);
+            }
+        });
+        
+        // 4. Open the UI
+        linkHandler.open();
+    }
+</script>
+
+<button on:click={initializePlaid} class="bg-blue-600 text-white px-4 py-2 rounded">
+    Link Bank Account
+</button>
+5. Fetch Your Net Worth & Budgets!Goal: Now that the bank is linked, actually pull your balances.Action: Create a backend route that uses your saved access_token to ask Plaid for account balances.from plaid.model.accounts_balance_get_request import AccountsBalanceGetRequest
+
+@router.get("/net-worth")
+async def get_net_worth(user: User = Depends(get_current_session)):
+    # 1. Get the user's linked bank
+    plaid_item = await PlaidItem.find_one(PlaidItem.owner.id == user.id)
+    if not plaid_item:
+        return {"error": "No bank linked"}
+
+    # 2. Ask Plaid for the balances
+    request = AccountsBalanceGetRequest(access_token=plaid_item.access_token)
+    response = client.accounts_balance_get(request)
+    
+    # 3. Calculate total
+    total_cash = 0
+    total_debt = 0
+    for account in response['accounts']:
+        if account['type'] == 'depository': # Checking/Savings
+            total_cash += account['balances']['current']
+        elif account['type'] == 'credit': # Credit Cards
+            total_debt += account['balances']['current']
+            
+    return {
+        "net_worth": total_cash - total_debt,
+        "cash": total_cash,
+        "debt": total_debt,
+        "accounts": response['accounts']
+    }

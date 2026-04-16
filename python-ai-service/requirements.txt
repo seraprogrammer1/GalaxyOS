@@ -2,3 +2,7 @@ fastapi
 uvicorn[standard]
 httpx
 python-dotenv
+plaid-python
+motor
+beanie==1.26.0
+cryptography

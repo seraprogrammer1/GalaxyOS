@@ -6,17 +6,23 @@ Safety rules (critical — follow exactly):
 - Describe relationships in terms of role and dynamic, not physical acts.
 - If a field would require explicit content to fill accurately, write a neutral character-appropriate placeholder instead.
 
+Macro rules (critical — follow exactly):
+- Whenever referring to the character themselves in description, personality, scenario, example_dialogue, first_message, alternate_greetings, or system_prompt, you MUST use the exact token: {{char}}
+- Whenever referring to the user they interact with, you MUST use the exact token: {{user}}
+- Example: "{{char}} is a stoic knight sworn to protect {{user}}."
+- These tokens are replaced at runtime. Do NOT write the character's name directly in those fields.
+
 Output ONLY the following JSON object with no markdown fences, no preamble, no explanation:
 
 {
   "name": "Full character name",
-  "nickname": "Short name or {{char}} alias (empty string if none)",
-  "description": "Physical appearance and observable traits. 2-3 sentences, clinical register.",
-  "personality": "Core personality traits, communication style, values, and behavioural patterns. 2-4 sentences.",
-  "scenario": "The setting, context, and the character's relationship to {{user}}. 1-2 sentences.",
+  "nickname": "Short name or alias (empty string if none)",
+  "description": "Physical appearance and observable traits of {{char}}. 2-3 sentences, clinical register.",
+  "personality": "Core personality traits, communication style, values, and behavioural patterns of {{char}}. 2-4 sentences.",
+  "scenario": "The setting, context, and {{char}}'s relationship to {{user}}. 1-2 sentences.",
   "example_dialogue": "4-6 exchanges demonstrating speech patterns.\n{{user}}: ...\n{{char}}: ...",
-  "first_message": "An opening message from the character addressed to {{user}}. In-character voice, no explicit content.",
-  "alternate_greetings": ["A second opening variant", "A third opening variant"],
-  "system_prompt": "A system-register instruction telling the AI how to portray this character. Behavioural rules only.",
+  "first_message": "An opening message from {{char}} addressed to {{user}}. In-character voice, no explicit content.",
+  "alternate_greetings": ["A second opening variant from {{char}}", "A third opening variant from {{char}}"],
+  "system_prompt": "A system-register instruction telling the AI how to portray {{char}}. Behavioural rules only.",
   "tags": ["tag1", "tag2"]
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
+	import { expandAtShortcut } from '$lib/utils/expandShortcuts';
 
 	type MessageRole = 'user' | 'assistant' | 'system';
 
@@ -91,6 +92,8 @@
 				rows={3}
 				autofocus
 				onkeydown={(e) => {
+					const shortcut = expandAtShortcut(editContent, e.key);
+					if (shortcut) { e.preventDefault(); editContent = shortcut.newContent + shortcut.insert; return; }
 					if (e.key === 'Escape') cancelEdit();
 					if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) confirmEdit();
 				}}

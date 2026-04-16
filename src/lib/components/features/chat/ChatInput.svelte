@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { expandAtShortcut, expandAllShortcuts } from '$lib/utils/expandShortcuts';
+
 	let {
 		placeholder = 'Ask Galaxy AI anything...',
 		disabled = false,
@@ -15,32 +17,22 @@
 
 	const canSend = $derived(!disabled && (content.trim().length > 0 || canRetry));
 
-	/** Expand @c → {{char}} and @u → {{user}} as a word-boundary substitution. */
-	function expandShortcuts(text: string): string {
-		return text
-			.replace(/(^|(?<=\s))@c(?=\s|$)/g, '$1{{char}}')
-			.replace(/(^|(?<=\s))@u(?=\s|$)/g, '$1{{user}}');
-	}
-
 	function submit(): void {
 		if (!canSend) {
 			return;
 		}
 
-		onSend?.(expandShortcuts(content.trim()));
+		onSend?.(expandAllShortcuts(content.trim()));
 		content = '';
 	}
 
 	function onKeyDown(event: KeyboardEvent): void {
-		// Expand @c / @u on Space when the token appears at end of content
-		if (event.key === ' ') {
-			const match = /(^|\s)(@c|@u)$/.exec(content);
-			if (match) {
-				event.preventDefault();
-				const token = match[2] === '@c' ? '{{char}}' : '{{user}}';
-				content = content.slice(0, content.length - match[2].length) + token + ' ';
-				return;
-			}
+		// Expand @c / @u on space, ", or * when the token appears at end of content
+		const shortcut = expandAtShortcut(content, event.key);
+		if (shortcut) {
+			event.preventDefault();
+			content = shortcut.newContent + shortcut.insert;
+			return;
 		}
 		if (event.key === 'Enter' && !event.shiftKey) {
 			event.preventDefault();
