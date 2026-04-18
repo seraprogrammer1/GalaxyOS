@@ -1,37 +1,9 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
 	import Goals from '$lib/components/features/Goals.svelte';
 	import BudgetWidget from '$lib/components/features/BudgetWidget.svelte';
 	import NacaWidget from '$lib/components/features/NacaWidget.svelte';
 	import RecentChatsWidget from '$lib/components/features/RecentChatsWidget.svelte';
-	import NetWorthWidget from '$lib/components/features/NetWorthWidget.svelte';
 	import { uiStore } from '$lib/stores/ui';
-
-	interface BudgetData {
-		remaining: string;
-		total: number;
-		spent: number;
-		dailyAllowance: string;
-	}
-
-	let budgetData = $state<BudgetData | null>(null);
-
-	async function fetchBudget() {
-		try {
-			const res = await fetch('/api/plaid/budget');
-			if (res.ok) {
-				budgetData = await res.json();
-			}
-			// If not OK (no banks linked, not admin, etc.) leave budgetData null
-			// so BudgetWidget falls back to its built-in mock defaults.
-		} catch {
-			// Network error — fall back to mock data silently.
-		}
-	}
-
-	$effect(() => {
-		untrack(() => void fetchBudget());
-	});
 </script>
 
 <section
@@ -45,7 +17,7 @@
 	{#if $uiStore.dashboardLayout === 'sidebar'}
 		<div class="sidebar-layout">
 			<aside class="summary-column">
-				<div class="widget-panel compact"><BudgetWidget budget={budgetData ?? undefined} variant={$uiStore.budgetVariant} /></div>
+				<div class="widget-panel compact"><BudgetWidget variant={$uiStore.budgetVariant} /></div>
 				<div class="widget-panel compact"><NacaWidget /></div>
 			</aside>
 			<div class="content-column">
@@ -53,24 +25,19 @@
 				<div class="widget-panel short"><RecentChatsWidget /></div>
 			</div>
 		</div>
-		<div class="networth-sidebar-panel widget-panel">
-			<NetWorthWidget />
-		</div>
 	{:else if $uiStore.dashboardLayout === 'columns'}
 		<div class="columns-layout">
 			<div class="widget-panel"><Goals /></div>
 			<div class="widget-panel"><RecentChatsWidget /></div>
-			<div class="widget-panel"><BudgetWidget budget={budgetData ?? undefined} variant={$uiStore.budgetVariant} /></div>
+			<div class="widget-panel"><BudgetWidget variant={$uiStore.budgetVariant} /></div>
 			<div class="widget-panel"><NacaWidget /></div>
-			<div class="widget-panel"><NetWorthWidget /></div>
 		</div>
 	{:else}
 		<div class="bento-layout">
 			<div class="widget-panel goals-cell"><Goals /></div>
 			<div class="widget-panel chats-cell"><RecentChatsWidget /></div>
-			<div class="widget-panel budget-cell"><BudgetWidget budget={budgetData ?? undefined} variant={$uiStore.budgetVariant} /></div>
+			<div class="widget-panel budget-cell"><BudgetWidget variant={$uiStore.budgetVariant} /></div>
 			<div class="widget-panel naca-cell"><NacaWidget /></div>
-			<div class="widget-panel networth-cell"><NetWorthWidget /></div>
 		</div>
 	{/if}
 </section>
@@ -158,16 +125,6 @@
 		grid-row: span 3;
 	}
 
-	.networth-cell {
-		grid-column: span 5;
-		grid-row: span 2;
-	}
-
-	.networth-sidebar-panel {
-		margin-top: 1rem;
-		height: 20rem;
-	}
-
 	@media (max-width: 1023px) {
 		.sidebar-layout {
 			flex-direction: column;
@@ -192,8 +149,7 @@
 		.goals-cell,
 		.chats-cell,
 		.budget-cell,
-		.naca-cell,
-		.networth-cell {
+		.naca-cell {
 			grid-column: auto;
 			grid-row: auto;
 		}

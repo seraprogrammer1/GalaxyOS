@@ -108,7 +108,8 @@ async def lifespan(app: FastAPI):
     from db import connect_db, close_db
     from models.plaid_item import PlaidItem
     from models.session import Session
-    await connect_db([PlaidItem, Session])
+    from models.transaction import Transaction
+    await connect_db([PlaidItem, Session, Transaction])
     yield
     await close_db()
 

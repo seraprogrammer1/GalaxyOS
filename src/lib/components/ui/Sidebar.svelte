@@ -6,6 +6,7 @@
 
 	const links = [
 		{ href: '/dashboard', label: 'Dashboard' },
+		{ href: '/budgets', label: 'Budgets' },
 		{ href: '/chat', label: 'AI Chat' },
 		{ href: '/characters', label: 'Characters' },
 		{ href: '/naca', label: 'NACA Calc' },

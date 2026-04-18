@@ -1,6 +1,7 @@
 <script lang="ts">
 	interface Props {
 		onLinked?: () => void;
+		products?: string[];
 	}
 
 	interface PlaidHandler {
@@ -15,7 +16,7 @@
 		onLoad?: () => void;
 	}
 
-	let { onLinked }: Props = $props();
+	let { onLinked, products = ['transactions', 'investments', 'liabilities'] }: Props = $props();
 
 	let loading = $state(false);
 	let error = $state('');
@@ -26,7 +27,11 @@
 
 		let link_token: string;
 		try {
-			const res = await fetch('/api/plaid/create-link-token', { method: 'POST' });
+			const res = await fetch('/api/plaid/create-link-token', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ products }),
+		});
 			const data = await res.json();
 			if (!res.ok) throw new Error(data.error ?? 'Failed to create link token');
 			link_token = data.link_token;
@@ -52,6 +57,7 @@
 							public_token,
 							institution_name: institution.name ?? 'Unknown Institution',
 							institution_id: institution.institution_id ?? '',
+							products,
 						}),
 					});
 					const data = await res.json();

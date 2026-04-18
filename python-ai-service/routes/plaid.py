@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import calendar
 import hashlib
 from datetime import datetime, timezone
@@ -8,11 +9,13 @@ from typing import Annotated, Any
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
+from pymongo import ReplaceOne
 from pydantic import BaseModel
 
 from auth import Session, require_admin
 from encryption import decrypt_token, encrypt_token
 from models.plaid_item import PlaidItem
+from models.transaction import Transaction
 from plaid_client import get_plaid_client
 
 import os
@@ -24,6 +27,7 @@ from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchan
 from plaid.model.accounts_balance_get_request import AccountsBalanceGetRequest
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from plaid.model.transactions_recurring_get_request import TransactionsRecurringGetRequest
+from plaid.model.transactions_refresh_request import TransactionsRefreshRequest
 from plaid.model.investments_holdings_get_request import InvestmentsHoldingsGetRequest
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 from plaid.model.item_remove_request import ItemRemoveRequest
@@ -192,6 +196,8 @@ async def remove_item(item_id: str, session: AdminSession) -> dict:
         pass
 
     await item.delete()
+    # Remove all stored transactions for this item so no stale data remains
+    await Transaction.get_motor_collection().delete_many({"item_id": item_id})
     return {"status": "removed", "item_id": item_id}
 
 
@@ -323,45 +329,70 @@ async def get_net_worth(session: AdminSession) -> dict:
 # ---------------------------------------------------------------------------
 
 @router.get("/transactions")
-async def sync_transactions(session: AdminSession) -> dict:
-    items = await PlaidItem.find(
-        PlaidItem.owner == PydanticObjectId(str(session.user_id))
-    ).to_list()
+async def sync_transactions(
+    session: AdminSession,
+    limit: int = 100,
+    offset: int = 0,
+    category: str = "",
+) -> dict:
+    """
+    Returns stored transactions for the current user, sorted by date descending.
+    Supports pagination via limit/offset and optional category_primary filter.
 
-    client = get_plaid_client()
-    all_added: list[dict] = []
-    all_modified: list[dict] = []
-    all_removed: list[dict] = []
+    On first call (no stored transactions for this user), automatically runs a
+    full sync from Plaid first so the frontend never gets an empty response.
+    """
+    owner_id = PydanticObjectId(str(session.user_id))
 
-    for item in items:
-        try:
-            raw_token = decrypt_token(item.access_token)
-            cursor = item.cursor or ""
-            has_more = True
+    # Auto-sync on cold start — no stored transactions for this user yet
+    existing_count = await Transaction.find(Transaction.owner == owner_id).count()
+    if existing_count == 0:
+        items = await PlaidItem.find(
+            PlaidItem.owner == owner_id
+        ).to_list()
+        for item in items:
+            if "transactions" not in (item.products or []):
+                continue
+            try:
+                await _sync_and_store(item)
+            except Exception:
+                pass
 
-            while has_more:
-                request = TransactionsSyncRequest(
-                    access_token=raw_token,
-                    cursor=cursor if cursor else None,
-                )
-                response = client.transactions_sync(request)
+    query = Transaction.find(Transaction.owner == owner_id)
+    if category:
+        query = query.find(Transaction.category_primary == category)
 
-                all_added.extend(_serialize_transactions(response["added"], item.institution_name))
-                all_modified.extend(_serialize_transactions(response["modified"], item.institution_name))
-                all_removed.extend([{"transaction_id": t["transaction_id"]} for t in response["removed"]])
+    total = await query.count()
+    txns = (
+        await query
+        .sort(-Transaction.date)  # type: ignore[arg-type]
+        .skip(offset)
+        .limit(limit)
+        .to_list()
+    )
 
-                has_more = response["has_more"]
-                cursor = response["next_cursor"]
-
-            # Persist updated cursor
-            item.cursor = cursor
-            await item.save()
-
-        except Exception as exc:
-            # Don't abort — include error signal and continue other items
-            all_added.append({"error": str(exc), "institution_name": item.institution_name})
-
-    return {"added": all_added, "modified": all_modified, "removed": all_removed}
+    return {
+        "added": [
+            {
+                "transaction_id": t.transaction_id,
+                "account_id": t.account_id,
+                "amount": t.amount,
+                "date": t.date,
+                "name": t.name,
+                "merchant_name": t.merchant_name,
+                "pending": t.pending,
+                "category_primary": t.category_primary,
+                "category_detailed": t.category_detailed,
+                "institution_name": t.institution_name,
+            }
+            for t in txns
+        ],
+        "modified": [],
+        "removed": [],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 def _serialize_transactions(txns: list, institution_name: str) -> list[dict]:
@@ -386,72 +417,103 @@ def _serialize_transactions(txns: list, institution_name: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# _sync_and_store  — shared cursor-sync helper that persists to MongoDB
+# ---------------------------------------------------------------------------
+
+async def _sync_and_store(item: PlaidItem) -> None:
+    """
+    Runs a full cursor-based transactions/sync for a single PlaidItem and
+    bulk-upserts the results into the Transaction collection.
+
+    - Added / modified transactions are upserted (ReplaceOne with upsert=True)
+      in one bulk_write call per page — one round-trip instead of one per doc.
+    - Removed transaction IDs are deleted in a single delete_many call per page.
+    - The item's cursor is persisted after all pages complete.
+
+    Raises on Plaid API errors so callers can handle per-item failures.
+    """
+    client = get_plaid_client()
+    raw_token = decrypt_token(item.access_token)
+    cursor = item.cursor or ""
+    has_more = True
+    collection = Transaction.get_motor_collection()
+
+    while has_more:
+        sync_kwargs: dict = {"access_token": raw_token}
+        if cursor:
+            sync_kwargs["cursor"] = cursor
+        response = client.transactions_sync(TransactionsSyncRequest(**sync_kwargs))
+
+        # --- upsert added + modified ---
+        to_upsert = response["added"] + response["modified"]
+        if to_upsert:
+            ops = []
+            for t in to_upsert:
+                pfc = t.get("personal_finance_category") or {}
+                doc = {
+                    "transaction_id": t.get("transaction_id"),
+                    "item_id": item.item_id,
+                    "account_id": t.get("account_id") or "",
+                    "owner": item.owner,
+                    "amount": float(t.get("amount") or 0),
+                    "date": str(t.get("date", "")),
+                    "name": t.get("name") or "",
+                    "merchant_name": t.get("merchant_name"),
+                    "pending": bool(t.get("pending", False)),
+                    "category_primary": pfc.get("primary", ""),
+                    "category_detailed": pfc.get("detailed", ""),
+                    "institution_name": item.institution_name,
+                }
+                ops.append(
+                    ReplaceOne({"transaction_id": doc["transaction_id"]}, doc, upsert=True)
+                )
+            await collection.bulk_write(ops, ordered=False)
+
+        # --- delete removed ---
+        removed_ids = [t.get("transaction_id") for t in response["removed"] if t.get("transaction_id")]
+        if removed_ids:
+            await collection.delete_many({"transaction_id": {"$in": removed_ids}})
+
+        has_more = response["has_more"]
+        cursor = response["next_cursor"]
+
+    item.cursor = cursor
+    await item.save()
+
+
+# ---------------------------------------------------------------------------
 # GET /api/plaid/budget  — monthly spend summary for BudgetWidget
 # ---------------------------------------------------------------------------
 
 @router.get("/budget")
 async def get_budget(session: AdminSession) -> dict:
-    items = await PlaidItem.find(
-        PlaidItem.owner == PydanticObjectId(str(session.user_id))
-    ).to_list()
-
-    client = get_plaid_client()
+    owner_id = PydanticObjectId(str(session.user_id))
     now = datetime.now(timezone.utc)
-    month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    month_start_str = f"{now.year}-{now.month:02d}-01"
     days_in_month = calendar.monthrange(now.year, now.month)[1]
     days_elapsed = max(now.day, 1)
     days_remaining = max(days_in_month - now.day, 1)
 
+    # Query stored transactions for the current month, excluding pending
+    txns = await Transaction.find(
+        Transaction.owner == owner_id,
+        Transaction.date >= month_start_str,
+        Transaction.pending == False,  # noqa: E712
+    ).to_list()
+
     total_income: float = 0.0
     total_spent: float = 0.0
 
-    for item in items:
-        try:
-            raw_token = decrypt_token(item.access_token)
-            cursor = item.cursor or ""
-            has_more = True
+    for t in txns:
+        amount = t.amount
+        primary = t.category_primary
+        if amount > 0:
+            if primary not in ("TRANSFER_IN", "LOAN_PAYMENTS"):
+                total_spent += amount
+        else:
+            if primary in ("INCOME", "TRANSFER_IN"):
+                total_income += abs(amount)
 
-            while has_more:
-                request = TransactionsSyncRequest(
-                    access_token=raw_token,
-                    cursor=cursor if cursor else None,
-                )
-                response = client.transactions_sync(request)
-
-                for t in response["added"] + response["modified"]:
-                    if t.get("pending"):
-                        continue
-                    try:
-                        tx_date = datetime.fromisoformat(str(t.get("date", ""))).replace(tzinfo=timezone.utc)
-                    except (ValueError, TypeError):
-                        continue
-                    if tx_date < month_start:
-                        continue
-
-                    amount: float = float(t.get("amount") or 0)
-                    pfc = t.get("personal_finance_category") or {}
-                    primary = pfc.get("primary", "")
-
-                    if amount > 0:
-                        # Plaid: positive = money out (debit / expense)
-                        if primary not in ("TRANSFER_IN", "LOAN_PAYMENTS"):
-                            total_spent += amount
-                    else:
-                        # negative = money in (income / credit)
-                        if primary in ("INCOME", "TRANSFER_IN"):
-                            total_income += abs(amount)
-
-                has_more = response["has_more"]
-                cursor = response["next_cursor"]
-
-            item.cursor = cursor
-            await item.save()
-
-        except Exception:
-            continue
-
-    # Derive a budget total: use detected income if present, else fall back to
-    # a rough extrapolation from current month spending pace.
     if total_income > 0:
         budget_total = total_income
     else:
@@ -473,6 +535,87 @@ async def get_budget(session: AdminSession) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/plaid/money-flow  — monthly income vs expense for bar chart
+# ---------------------------------------------------------------------------
+
+@router.get("/money-flow")
+async def get_money_flow(session: AdminSession, months: int = 7) -> dict:
+    """Return income vs expense aggregated by month for the last N months."""
+    owner_id = PydanticObjectId(str(session.user_id))
+    now = datetime.now(timezone.utc)
+
+    # Build month buckets going back N months (including current)
+    buckets: dict[str, dict[str, float]] = {}
+    for i in range(months):
+        y = now.year
+        m = now.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        key = f"{y}-{m:02d}"
+        buckets[key] = {"income": 0.0, "expense": 0.0}
+
+    earliest_date_str = f"{min(buckets.keys())}-01"
+
+    # Query stored transactions from the earliest bucket date forward
+    txns = await Transaction.find(
+        Transaction.owner == owner_id,
+        Transaction.date >= earliest_date_str,
+        Transaction.pending == False,  # noqa: E712
+    ).to_list()
+
+    for t in txns:
+        key = t.date[:7]  # "YYYY-MM"
+        if key not in buckets:
+            continue
+        amount = t.amount
+        primary = t.category_primary
+        if amount > 0:
+            if primary not in ("TRANSFER_IN", "LOAN_PAYMENTS"):
+                buckets[key]["expense"] += amount
+        else:
+            if primary in ("INCOME", "TRANSFER_IN"):
+                buckets[key]["income"] += abs(amount)
+
+    month_names = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
+
+    result_months = []
+    for key in sorted(buckets.keys()):
+        y, m = key.split("-")
+        result_months.append({
+            "month": month_names[int(m) - 1],
+            "year": int(y),
+            "income": round(buckets[key]["income"], 2),
+            "expense": round(buckets[key]["expense"], 2),
+        })
+
+    cur_key = f"{now.year}-{now.month:02d}"
+    prev_m = now.month - 1
+    prev_y = now.year
+    if prev_m <= 0:
+        prev_m += 12
+        prev_y -= 1
+    prev_key = f"{prev_y}-{prev_m:02d}"
+
+    cur = buckets.get(cur_key, {"income": 0, "expense": 0})
+    prev = buckets.get(prev_key, {"income": 0, "expense": 0})
+
+    def _pct_change(current: float, previous: float) -> float:
+        if previous == 0:
+            return 100.0 if current > 0 else 0.0
+        return round(((current - previous) / previous) * 100, 1)
+
+    return {
+        "months": result_months,
+        "income_change_pct": _pct_change(cur["income"], prev["income"]),
+        "expense_change_pct": _pct_change(cur["expense"], prev["expense"]),
+    }
+
+
+# ---------------------------------------------------------------------------
 # GET /api/plaid/recurring  — subscription & bill tracker
 # ---------------------------------------------------------------------------
 
@@ -487,6 +630,8 @@ async def get_recurring(session: AdminSession) -> dict:
     all_outflow: list[dict] = []
 
     for item in items:
+        if "transactions" not in (item.products or []):
+            continue
         try:
             raw_token = decrypt_token(item.access_token)
             # recurring/get requires account_ids — fetch them first
@@ -548,6 +693,8 @@ async def get_investments(session: AdminSession) -> dict:
     total_value: float = 0.0
 
     for item in items:
+        if "investments" not in (item.products or []):
+            continue
         try:
             raw_token = decrypt_token(item.access_token)
             response = client.investments_holdings_get(
@@ -608,6 +755,8 @@ async def get_liabilities(session: AdminSession) -> dict:
     total_debt: float = 0.0
 
     for item in items:
+        if "liabilities" not in (item.products or []):
+            continue
         try:
             raw_token = decrypt_token(item.access_token)
             response = client.liabilities_get(
@@ -691,12 +840,15 @@ async def get_liabilities(session: AdminSession) -> dict:
 @router.post("/webhook")
 async def plaid_webhook(request: Request) -> dict:
     """
-    Receives Plaid webhook events. On SYNC_UPDATES_AVAILABLE, clears the
-    stored cursor for the affected item so the next /transactions call
-    fetches fresh data.
+    Receives Plaid webhook events.
 
-    Plaid signs webhooks with a JWT — in production you should verify this.
-    For sandbox, we trust the payload directly.
+    On SYNC_UPDATES_AVAILABLE / DEFAULT_UPDATE: kicks off a background
+    _sync_and_store() for the affected item so the transactions collection
+    stays in sync automatically without any user action.
+
+    Plaid signs webhooks with a JWT — in production you should verify this
+    signature using plaid-python's WebhookVerificationKeyGetRequest before
+    trusting the payload.
     """
     try:
         payload: dict = await request.json()
@@ -707,15 +859,51 @@ async def plaid_webhook(request: Request) -> dict:
     webhook_code = payload.get("webhook_code", "")
     item_id = payload.get("item_id", "")
 
-    if webhook_type == "TRANSACTIONS":
-        if webhook_code in ("SYNC_UPDATES_AVAILABLE", "DEFAULT_UPDATE"):
-            # Clear cursor so next /transactions or /budget fetch pulls fresh data
-            item = await PlaidItem.find_one(PlaidItem.item_id == item_id)
-            if item:
-                item.cursor = None
-                await item.save()
+    if webhook_type == "TRANSACTIONS" and webhook_code in ("SYNC_UPDATES_AVAILABLE", "DEFAULT_UPDATE"):
+        item = await PlaidItem.find_one(PlaidItem.item_id == item_id)
+        if item and "transactions" in (item.products or []):
+            # Fire-and-forget: background sync so we respond to Plaid immediately
+            asyncio.create_task(_sync_and_store(item))
 
     return {"received": True, "webhook_type": webhook_type, "webhook_code": webhook_code}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/plaid/transactions/refresh  — force immediate bank check
+# ---------------------------------------------------------------------------
+
+@router.post("/transactions/refresh")
+async def refresh_transactions(session: AdminSession) -> dict:
+    """
+    Calls Plaid's /transactions/refresh for each linked item, which signals
+    Plaid to immediately pull new transactions from the institution rather than
+    waiting for the next automatic check (which runs 1-4x/day per institution).
+
+    After requesting the refresh, runs _sync_and_store to pull any new data
+    into MongoDB right away.
+
+    NOTE: In full Production this endpoint is billed as an add-on feature.
+    In Sandbox and Development it is available at no extra cost.
+    """
+    owner_id = PydanticObjectId(str(session.user_id))
+    items = await PlaidItem.find(PlaidItem.owner == owner_id).to_list()
+    client = get_plaid_client()
+    results = []
+
+    for item in items:
+        if "transactions" not in (item.products or []):
+            continue
+        try:
+            raw_token = decrypt_token(item.access_token)
+            # Ask Plaid to immediately check the bank for new transactions
+            client.transactions_refresh(TransactionsRefreshRequest(access_token=raw_token))
+            # Pull whatever Plaid found into our DB
+            await _sync_and_store(item)
+            results.append({"item_id": item.item_id, "institution_name": item.institution_name, "status": "refreshed"})
+        except Exception as exc:
+            results.append({"item_id": item.item_id, "institution_name": item.institution_name, "error": str(exc)})
+
+    return {"results": results}
 
 
 # ---------------------------------------------------------------------------
