@@ -109,8 +109,18 @@ async def lifespan(app: FastAPI):
     from models.plaid_item import PlaidItem
     from models.session import Session
     from models.transaction import Transaction
-    await connect_db([PlaidItem, Session, Transaction])
+    from models.account_snapshot import AccountSnapshot
+    from models.investment_snapshot import InvestmentSnapshot
+    from models.liability_snapshot import LiabilitySnapshot
+    from models.recurring_snapshot import RecurringSnapshot
+    from sync_scheduler import start_scheduler, stop_scheduler
+    await connect_db([
+        PlaidItem, Session, Transaction,
+        AccountSnapshot, InvestmentSnapshot, LiabilitySnapshot, RecurringSnapshot,
+    ])
+    await start_scheduler()
     yield
+    await stop_scheduler()
     await close_db()
 
 
