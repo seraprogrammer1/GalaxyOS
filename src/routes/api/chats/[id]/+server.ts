@@ -16,6 +16,15 @@ function isTailMessage(v: unknown): v is { role: string; content: string } {
 	);
 }
 
+function isValidVariant(variant: unknown): variant is { content: string; tail: { role: string; content: string }[] } {
+	if (typeof variant !== 'object' || variant === null) return false;
+	const v = variant as Record<string, unknown>;
+	const hasValidContent = typeof v.content === 'string';
+	const hasValidTail = Array.isArray(v.tail);
+	const allTailMessagesValid = hasValidTail && v.tail.every(isTailMessage);
+	return hasValidContent && hasValidTail && allTailMessagesValid;
+}
+
 function normalizeMessage(msg: unknown): Record<string, unknown> | null {
 	if (typeof msg !== 'object' || msg === null) return null;
 	const m = msg as Record<string, unknown>;
@@ -26,17 +35,11 @@ function normalizeMessage(msg: unknown): Record<string, unknown> | null {
 	if ('variants' in m) {
 		if (!Array.isArray(m.variants)) return null;
 		const variants = m.variants.map((variant) => {
-			if (typeof variant !== 'object' || variant === null) return null;
-			const v = variant as Record<string, unknown>;
-			if (typeof v.content !== 'string' || !Array.isArray(v.tail) || !v.tail.every(isTailMessage)) {
-				return null;
-			}
+			if (!isValidVariant(variant)) return null;
+			const v = variant as { content: string; tail: { role: string; content: string }[] };
 			return {
 				content: v.content,
-				tail: v.tail.map((tailMessage) => {
-					const t = tailMessage as Record<string, unknown>;
-					return { role: t.role, content: t.content };
-				})
+				tail: v.tail.map((tailMessage) => ({ role: tailMessage.role, content: tailMessage.content }))
 			};
 		});
 		if (variants.some((variant) => variant === null)) return null;
@@ -161,14 +164,14 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 	if (rawMessages !== null)
 		c.messages = rawMessages.map((m) => normalizeMessage(m)).filter((m) => m !== null);
 
-	let assignedCharacterDoc: Record<string, unknown> | null = null;
+	let validatedCharacterDoc: Record<string, unknown> | null = null;
 	if (characterId !== undefined) {
 		if (characterId) {
-			assignedCharacterDoc = (await Character.findOne({
+			validatedCharacterDoc = (await Character.findOne({
 				_id: characterId,
 				owner: locals.session.user_id
 			}).lean()) as Record<string, unknown> | null;
-			if (!assignedCharacterDoc) {
+			if (!validatedCharacterDoc) {
 				return json({ error: 'Character not found' }, { status: 404 });
 			}
 		}
@@ -182,7 +185,7 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		(c.messages as unknown[]).length === 0
 	) {
 		try {
-			const charDoc = assignedCharacterDoc;
+			const charDoc = validatedCharacterDoc;
 			if (charDoc && typeof charDoc.first_message === 'string' && charDoc.first_message.trim()) {
 				const firstMsg = charDoc.first_message.trim();
 				const alts = Array.isArray(charDoc.alternate_greetings)
