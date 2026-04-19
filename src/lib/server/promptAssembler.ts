@@ -8,9 +8,7 @@ import { Lorebook } from '$lib/server/models/Lorebook';
 import { UserSettings } from '$lib/server/models/UserSettings';
 import { runLorebookEngine } from '$lib/server/lorebookEngine';
 import { applyMacros } from '$lib/server/macroEngine';
-
-const PYTHON_BASE = (process.env.PYTHON_AI_SERVICE_URL ?? 'http://127.0.0.1:8000').replace(/\/+$/, '');
-const PYTHON_TIMEOUT_MS = Number.parseInt(process.env.PYTHON_AI_TIMEOUT_MS ?? '15000', 10) || 15000;
+import { callProvider } from '$lib/server/aiProviders';
 
 export interface StoredMessage {
 	role: 'user' | 'assistant' | 'system';
@@ -180,48 +178,17 @@ export async function assembleMessages(
 	return assembled;
 }
 
-/** Call the Python AI service and return the generated text. */
+/** Call the configured AI provider and return the generated text. */
 export async function callAI(
 	assembled: StoredMessage[],
 	providerConfig: ProviderConfig
 ): Promise<string> {
-	type PythonGenerateResponse =
-		| string
-		| { text?: string; message?: string; detail?: string };
-
-	let pythonResponse: Response;
-	try {
-		pythonResponse = await fetch(`${PYTHON_BASE}/api/generate`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				messages: assembled,
-				provider: providerConfig.provider,
-				gemini_model: providerConfig.geminiModel,
-				chub_model: providerConfig.chubModel
-			}),
-			signal: AbortSignal.timeout(PYTHON_TIMEOUT_MS)
-		});
-	} catch (error) {
-		if (error instanceof Error && error.name === 'TimeoutError') {
-			throw new Error('AI service timed out');
-		}
-		throw new Error('AI service unreachable');
-	}
-
-	if (!pythonResponse.ok) {
-		const errBody = await pythonResponse.json().catch(() => ({ detail: 'AI service error' })) as { detail?: string };
-		throw new Error(errBody.detail ?? 'Failed to generate assistant response');
-	}
-
-	const generated = (await pythonResponse.json()) as PythonGenerateResponse;
-	const aiText =
-		typeof generated === 'string' ? generated
-		: typeof generated === 'object' && generated !== null
-			? (typeof generated.text === 'string' ? generated.text
-				: typeof generated.message === 'string' ? generated.message : '')
-			: '';
-
-	if (!aiText) throw new Error('Invalid AI response');
-	return aiText;
+	const text = await callProvider(
+		assembled as import('$lib/server/aiProviders').AIMessage[],
+		providerConfig.provider,
+		providerConfig.geminiModel,
+		providerConfig.chubModel
+	);
+	if (!text) throw new Error('Invalid AI response');
+	return text;
 }

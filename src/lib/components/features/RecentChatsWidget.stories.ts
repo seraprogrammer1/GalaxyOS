@@ -20,7 +20,33 @@ const MANY_THREADS = Array.from({ length: 18 }, (_, i) => ({
 }));
 
 /** Default — three mock chat threads. */
-export const Default: Story = {};
+export const Default: Story = {
+	args: {
+		threads: [
+			{
+				id: '1',
+				name: 'System Prompt Assistant',
+				lastMessage: 'Your prompt has been optimized.',
+				time: '2m ago',
+				unread: 0
+			},
+			{
+				id: '2',
+				name: 'Zillow Scraper Bot',
+				lastMessage: 'Found 14 new listings in Austin.',
+				time: '15m ago',
+				unread: 0
+			},
+			{
+				id: '3',
+				name: 'Code Review Agent',
+				lastMessage: 'PR #42 looks good to merge.',
+				time: '1h ago',
+				unread: 0
+			}
+		]
+	}
+};
 
 /** Empty — no conversations yet. */
 export const Empty: Story = {

@@ -9,6 +9,14 @@ const { mockChatFind, mockChatCreate, mockChatFindOne } = vi.hoisted(() => ({
 const { mockCharacterFindOne } = vi.hoisted(() => ({
 	mockCharacterFindOne: vi.fn()
 }));
+const mockCallAI = vi.fn();
+
+vi.mock('$lib/server/promptAssembler', () => ({
+	callAI: mockCallAI,
+	assembleMessages: vi.fn().mockReturnValue([]),
+	loadProviderConfig: vi.fn().mockReturnValue({ provider: 'gemini', geminiModel: 'gemini-pro', chubModel: '' }),
+	loadCharacter: vi.fn().mockResolvedValue(null)
+}));
 
 vi.mock('$lib/server/models/Chat', () => ({
 	Chat: {
@@ -133,7 +141,7 @@ describe('POST /api/chats/[id]/message', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		mockChatFindOne.mockReset();
-		vi.stubGlobal('fetch', vi.fn());
+		mockCallAI.mockReset();
 	});
 
 	it('saves user message then assistant response in order', async () => {
@@ -142,15 +150,13 @@ describe('POST /api/chats/[id]/message', () => {
 		const chatDoc = {
 			_id: chatId,
 			owner: userId,
+			assistant_prefill: '',
 			messages: [{ role: 'system', content: 'You are helpful.' }],
 			save
 		};
 
 		mockChatFindOne.mockResolvedValue(chatDoc);
-		vi.mocked(fetch).mockResolvedValue({
-			ok: true,
-			json: vi.fn().mockResolvedValue({ text: 'Mock AI response: Hello AI' })
-		} as never);
+		mockCallAI.mockResolvedValue('Mock AI response: Hello AI');
 
 		const { POST } = await import('./[id]/message/+server');
 		const res = await POST(
@@ -160,11 +166,8 @@ describe('POST /api/chats/[id]/message', () => {
 		expect(res.status).toBe(200);
 		expect(save).toHaveBeenCalledTimes(2);
 		expect(chatDoc.messages[1]).toEqual({ role: 'user', content: 'Hello AI' });
-		expect(chatDoc.messages[2]).toEqual({ role: 'assistant', content: 'Mock AI response: Hello AI' });
-		expect(fetch).toHaveBeenCalledWith(
-			'http://127.0.0.1:8000/api/generate',
-			expect.objectContaining({ method: 'POST' })
-		);
+		expect(chatDoc.messages[2]).toMatchObject({ role: 'assistant', content: 'Mock AI response: Hello AI' });
+		expect(mockCallAI).toHaveBeenCalled();
 	});
 
 	it('returns 403 if user does not own chat', async () => {

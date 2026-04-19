@@ -53,13 +53,20 @@
     "vitest": "^4.1.4"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.64",
+    "@ai-sdk/openai": "^3.0.53",
+    "ai": "^6.0.168",
     "bcrypt": "^6.0.0",
     "dompurify": "^3.3.3",
     "dotenv": "^17.4.1",
     "ipaddr.js": "^2.3.0",
+    "jose": "^6.2.2",
     "jsonwebtoken": "^9.0.3",
     "marked": "^18.0.0",
-    "mongoose": "^9.4.1"
+    "mongoose": "^9.4.1",
+    "node-cron": "^4.2.1",
+    "plaid": "^42.1.0",
+    "zod": "^4.3.6"
   },
   "msw": {
     "workerDirectory": [
