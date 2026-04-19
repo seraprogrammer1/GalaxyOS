@@ -34,7 +34,7 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
         const updated = await Goal.findOneAndUpdate(
                 { _id: params.id },
                 { $set: body },
-                { new: true }
+                { returnDocument: 'after' }
         );
 
         return json(updated);

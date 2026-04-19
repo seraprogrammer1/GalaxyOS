@@ -1,2 +1,10 @@
 fastapi
 uvicorn[standard]
+httpx
+python-dotenv
+plaid-python
+motor
+beanie==1.26.0
+cryptography
+apscheduler>=3.10,<4.0
+python-jose[cryptography]

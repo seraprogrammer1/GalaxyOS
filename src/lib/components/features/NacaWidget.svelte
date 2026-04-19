@@ -1,3 +1,4 @@
+
 <script lang="ts">
 	interface NacaData {
 		homePrice: string;
@@ -41,7 +42,7 @@
 		</div>
 	</div>
 
-	<button class="open-calc-btn">Open Calculator</button>
+	<button class="open-calc-btn" onclick={() => (window.location.href = '/naca')}>Open Calculator</button>
 </section>
 
 <style>
@@ -106,6 +107,9 @@
 	}
 
 	.open-calc-btn {
+		display: inline-flex;
+		justify-content: center;
+		align-items: center;
 		width: 100%;
 		padding: 0.5rem;
 		border: 1px solid var(--accent-primary, #ff6b8b);

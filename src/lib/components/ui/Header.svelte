@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { uiStore, type DashboardLayout, type BudgetVariant } from '$lib/stores/ui';
-
 	let {
 		username = 'Explorer',
 		currentPath = '/dashboard'
@@ -22,16 +20,6 @@
 		await fetch('/api/auth/logout', { method: 'POST' });
 		window.location.href = '/login';
 	}
-
-	function handleLayoutChange(event: Event) {
-		const value = (event.currentTarget as HTMLSelectElement).value as DashboardLayout;
-		uiStore.setDashboardLayout(value);
-	}
-
-	function handleBudgetVariantChange(event: Event) {
-		const value = (event.currentTarget as HTMLSelectElement).value as BudgetVariant;
-		uiStore.setBudgetVariant(value);
-	}
 </script>
 
 <header class="glass-header glass">
@@ -46,30 +34,6 @@
 	</div>
 
 	<div class="header-controls">
-		<label class="compact-control">
-			<span>Layout</span>
-			<select
-				data-testid="layout-select"
-				value={$uiStore.dashboardLayout}
-				onchange={handleLayoutChange}
-			>
-				<option value="bento">Bento</option>
-				<option value="sidebar">Sidebar</option>
-				<option value="columns">Columns</option>
-			</select>
-		</label>
-
-		<label class="compact-control">
-			<span>Budget</span>
-			<select
-				data-testid="budget-variant-select"
-				value={$uiStore.budgetVariant}
-				onchange={handleBudgetVariantChange}
-			>
-				<option value="standard">Standard</option>
-				<option value="minimal">Minimal</option>
-			</select>
-		</label>
 		<span class="notification-badge" aria-label="Notifications">3 New</span>
 	</div>
 
@@ -148,27 +112,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-	}
-
-	.compact-control {
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--text-secondary, #6b6b8a);
-		background: var(--bg-surface, #f0eef8);
-		padding: 0.35rem 0.45rem;
-		border-radius: var(--radius-sm, 8px);
-	}
-
-	.compact-control select {
-		border: 1px solid var(--bg-glass-border, rgba(255, 255, 255, 0.85));
-		border-radius: 6px;
-		padding: 0.18rem 0.3rem;
-		font-size: 0.75rem;
-		color: var(--text-secondary, #6b6b8a);
-		background: #fff;
 	}
 
 	.notification-badge {
