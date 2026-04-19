@@ -32,6 +32,25 @@
 	let loading = $state(true);
 	let fetchError = $state('');
 	let removingId = $state<string | null>(null);
+	let clearing = $state(false);
+
+	async function clearAllData() {
+		if (!confirm('Remove all linked accounts and Plaid data from the database? This cannot be undone.')) return;
+		clearing = true;
+		try {
+			const res = await fetch('/api/plaid/clear', { method: 'DELETE' });
+			if (!res.ok) {
+				const body = await res.json().catch(() => ({}));
+				throw new Error(body.error ?? 'Failed to clear data');
+			}
+			data = null;
+			await fetchNetWorth();
+		} catch (e) {
+			fetchError = (e as Error).message;
+		} finally {
+			clearing = false;
+		}
+	}
 
 	async function fetchNetWorth() {
 		loading = true;
@@ -140,6 +159,14 @@
 
 		<div class="link-more">
 			<PlaidLinkButton onLinked={fetchNetWorth} />
+			<button
+				class="clear-btn"
+				onclick={clearAllData}
+				disabled={clearing}
+				aria-label="Clear all Plaid data"
+			>
+				{clearing ? 'Clearing…' : 'Clear All Data'}
+			</button>
 		</div>
 	{/if}
 
@@ -317,6 +344,31 @@
 
 	.link-more {
 		margin-top: auto;
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.clear-btn {
+		background: none;
+		border: 1px solid color-mix(in srgb, var(--color-error, #ef4444) 50%, transparent);
+		border-radius: var(--radius-sm, 8px);
+		padding: 0.3rem 0.75rem;
+		font-size: 0.75rem;
+		cursor: pointer;
+		color: var(--color-error, #ef4444);
+		opacity: 0.75;
+		transition: opacity 0.15s;
+	}
+
+	.clear-btn:hover:not(:disabled) {
+		opacity: 1;
+	}
+
+	.clear-btn:disabled {
+		cursor: not-allowed;
+		opacity: 0.4;
 	}
 
 	.inline-error {

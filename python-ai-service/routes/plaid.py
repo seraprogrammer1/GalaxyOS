@@ -733,19 +733,29 @@ async def get_budget(session: AdminSession) -> dict:
     ).to_list()
 
     total_income: float = 0.0
-    total_spent: float = 0.0
+    gross_spent: float = 0.0
+    refunds: float = 0.0
 
     for t in txns:
         amount = t.amount
         primary = t.category_primary
         if amount > 0:
+            # Exclude transfers-in and loan payments from spending
             if primary not in ("TRANSFER_IN", "LOAN_PAYMENTS"):
-                total_spent += amount
-        else:
+                gross_spent += amount
+        else:  # amount < 0  (money received / credit)
             if primary in ("INCOME", "TRANSFER_IN"):
                 total_income += abs(amount)
+            elif primary not in ("TRANSFER_OUT", "LOAN_PAYMENTS"):
+                # Refund on an expense category — net against spending
+                refunds += abs(amount)
 
-    if total_income > 0:
+    total_spent = max(0.0, gross_spent - refunds)
+
+    # Only treat income as the budget ceiling if it's meaningfully large.
+    # Tiny interest-only income ($4/month) should not set a $4 budget.
+    income_is_meaningful = total_income >= max(total_spent * 0.3, 100.0)
+    if income_is_meaningful:
         budget_total = total_income
     else:
         daily_pace = total_spent / days_elapsed if days_elapsed else 0
@@ -761,6 +771,7 @@ async def get_budget(session: AdminSession) -> dict:
         "remaining": _fmt(remaining),
         "total": round(budget_total, 2),
         "spent": round(total_spent, 2),
+        "income": round(total_income, 2),
         "dailyAllowance": _fmt(daily_allowance),
     }
 
@@ -804,9 +815,12 @@ async def get_money_flow(session: AdminSession, months: int = 7) -> dict:
         if amount > 0:
             if primary not in ("TRANSFER_IN", "LOAN_PAYMENTS"):
                 buckets[key]["expense"] += amount
-        else:
+        else:  # amount < 0  (money received / credit)
             if primary in ("INCOME", "TRANSFER_IN"):
                 buckets[key]["income"] += abs(amount)
+            elif primary not in ("TRANSFER_OUT", "LOAN_PAYMENTS"):
+                # Refund — subtract from that month's expenses
+                buckets[key]["expense"] = max(0.0, buckets[key]["expense"] - abs(amount))
 
     month_names = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -1140,6 +1154,42 @@ async def refresh_transactions(session: AdminSession) -> dict:
             results.append({"item_id": item.item_id, "institution_name": item.institution_name, "error": str(exc)})
 
     return {"results": results}
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/plaid/clear  — remove ALL Plaid data for the current user
+# ---------------------------------------------------------------------------
+
+@router.delete("/clear")
+async def clear_all_plaid_data(session: AdminSession) -> dict:
+    """
+    Removes every piece of Plaid-related data for the current user:
+    - Calls Plaid's item_remove for each linked item (best-effort)
+    - Deletes all PlaidItem, Transaction, and snapshot documents
+    """
+    owner_id = PydanticObjectId(str(session.user_id))
+    items = await PlaidItem.find(PlaidItem.owner == owner_id).to_list()
+
+    client = get_plaid_client()
+    for item in items:
+        try:
+            raw_token = decrypt_token(item.access_token)
+            client.item_remove(ItemRemoveRequest(access_token=raw_token))
+        except Exception:
+            pass  # already removed on Plaid's side — still clean up locally
+
+    item_ids = [item.item_id for item in items]
+
+    # Delete all local data for this user
+    col = Transaction.get_motor_collection()
+    await col.delete_many({"owner": owner_id})
+    await AccountSnapshot.get_motor_collection().delete_many({"owner": owner_id})
+    await InvestmentSnapshot.get_motor_collection().delete_many({"owner": owner_id})
+    await LiabilitySnapshot.get_motor_collection().delete_many({"owner": owner_id})
+    await RecurringSnapshot.get_motor_collection().delete_many({"owner": owner_id})
+    await PlaidItem.get_motor_collection().delete_many({"owner": owner_id})
+
+    return {"status": "cleared", "items_removed": len(item_ids)}
 
 
 # ---------------------------------------------------------------------------

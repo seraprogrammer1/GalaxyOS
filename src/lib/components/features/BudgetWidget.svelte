@@ -6,6 +6,7 @@
 		remaining: string;
 		total: number;
 		spent: number;
+		income: number;
 		dailyAllowance: string;
 	}
 
@@ -15,28 +16,62 @@
 		variant = 'standard'
 	}: { budget?: BudgetData; netWorth?: number; variant?: BudgetVariant } = $props();
 
-	const DEFAULT_BUDGET: BudgetData = { remaining: '$4,520', total: 6000, spent: 1480, dailyAllowance: '$150' };
-
 	let fetchedBudget = $state<BudgetData | null>(null);
 	let loading = $state(false);
+	let fetchError = $state('');
 
 	$effect(() => {
 		if (budget !== undefined) return;
 		untrack(async () => {
 			loading = true;
+			fetchError = '';
 			try {
 				const res = await fetch('/api/plaid/budget');
-				if (res.ok) fetchedBudget = await res.json();
+				if (res.status === 401 || res.status === 403) {
+					fetchError = 'Admin access required';
+					return;
+				}
+				if (!res.ok) {
+					const body = await res.json().catch(() => ({}));
+					fetchError = body.error ?? 'Failed to load budget';
+					return;
+				}
+				fetchedBudget = await res.json();
 			} catch {
-				// silently fall back to defaults
+				fetchError = 'Could not connect to server';
 			} finally {
 				loading = false;
 			}
 		});
 	});
 
-	let activeBudget = $derived(budget ?? fetchedBudget ?? DEFAULT_BUDGET);
-	let progressPercent = $derived(Math.min(100, (activeBudget.spent / activeBudget.total) * 100));
+	let activeBudget = $derived(budget ?? fetchedBudget);
+	let progressPercent = $derived(
+		activeBudget && activeBudget.total > 0
+			? Math.min(100, (activeBudget.spent / activeBudget.total) * 100)
+			: 0
+	);
+
+	let clearing = $state(false);
+	let clearError = $state('');
+
+	async function clearAllData() {
+		if (!confirm('Remove all linked accounts and Plaid data from the database? This cannot be undone.')) return;
+		clearing = true;
+		clearError = '';
+		try {
+			const res = await fetch('/api/plaid/clear', { method: 'DELETE' });
+			if (!res.ok) {
+				const body = await res.json().catch(() => ({}));
+				throw new Error(body.error ?? 'Failed to clear data');
+			}
+			fetchedBudget = null;
+		} catch (e) {
+			clearError = (e as Error).message;
+		} finally {
+			clearing = false;
+		}
+	}
 </script>
 
 <section class="budget-widget glass" data-testid="budget-widget">
@@ -56,6 +91,13 @@
 
 	{#if loading}
 		<div class="loading-state">Loading…</div>
+	{:else if fetchError}
+		<div class="state-msg error">{fetchError}</div>
+	{:else if !activeBudget}
+		<div class="state-msg">
+			<p>No transaction data yet.</p>
+			<p class="hint">Link a bank account to see your budget.</p>
+		</div>
 	{:else}
 		<div class="metrics-grid">
 			<div class="metric">
@@ -85,6 +127,13 @@
 			</div>
 		{/if}
 	{/if}
+
+	<div class="clear-row">
+		{#if clearError}<span class="clear-error">{clearError}</span>{/if}
+		<button class="clear-btn" onclick={clearAllData} disabled={clearing} aria-label="Clear all Plaid data">
+			{clearing ? 'Clearing…' : 'Clear All Data'}
+		</button>
+	</div>
 </section>
 
 <style>
@@ -212,5 +261,59 @@
 		color: var(--text-muted, #a0a0c0);
 		padding: 1rem 0;
 		text-align: center;
+	}
+
+	.state-msg {
+		padding: 1.25rem 0;
+		text-align: center;
+		font-size: 0.9rem;
+		color: var(--text-secondary, #6b6b8a);
+	}
+
+	.state-msg.error {
+		color: var(--color-error, #ef4444);
+	}
+
+	.state-msg p {
+		margin: 0 0 0.25rem;
+	}
+
+	.state-msg .hint {
+		font-size: 0.78rem;
+		color: var(--text-muted, #a0a0c0);
+	}
+
+	.clear-row {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.5rem;
+		margin-top: 1rem;
+	}
+
+	.clear-error {
+		font-size: 0.75rem;
+		color: var(--color-error, #ef4444);
+	}
+
+	.clear-btn {
+		background: none;
+		border: 1px solid color-mix(in srgb, var(--color-error, #ef4444) 50%, transparent);
+		border-radius: var(--radius-sm, 8px);
+		padding: 0.3rem 0.75rem;
+		font-size: 0.75rem;
+		cursor: pointer;
+		color: var(--color-error, #ef4444);
+		opacity: 0.75;
+		transition: opacity 0.15s;
+	}
+
+	.clear-btn:hover:not(:disabled) {
+		opacity: 1;
+	}
+
+	.clear-btn:disabled {
+		cursor: not-allowed;
+		opacity: 0.4;
 	}
 </style>
