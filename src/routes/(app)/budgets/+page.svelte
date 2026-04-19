@@ -1,6 +1,7 @@
 <script lang="ts">
 	import PlaidLinkButton from '$lib/components/features/PlaidLinkButton.svelte';
 	import Goals from '$lib/components/features/Goals.svelte';
+	import TransactionsModal from '$lib/components/features/TransactionsModal.svelte';
 
 	// ── Category colour map ───────────────────────────────────────────────────────
 	const CAT_COLORS: Record<string, string> = {
@@ -35,6 +36,12 @@
 	let moneyFlowData = $state<Record<string, unknown> | null>(null);
 	let loading       = $state(true);
 	let noAccounts    = $state(false);
+
+	// ── Filter + modal state ────────────────────────────────────────────────────
+	let flowPeriod = $state<'year' | '6months'>('year');
+	let flowAccount = $state('');
+	let txnAccountFilter = $state('');
+	let txnModalOpen = $state(false);
 
 	// ── Chart hover state ────────────────────────────────────────────────────────
 	let hoveredBar = $state<{ month: string; value: number; type: string; x: number; y: number } | null>(null);
@@ -159,21 +166,51 @@
 		return `conic-gradient(${stops.join(', ')})`;
 	});
 
+	// ── Institutions list (for dropdowns) ───────────────────────────────────────
+	let institutionsList = $derived.by(() => {
+		const insts = (netWorthData?.institutions as Array<Record<string, unknown>>) ?? [];
+		return insts.map(i => String(i.institution_name ?? '')).filter(Boolean);
+	});
+
 	// ── Money flow chart ─────────────────────────────────────────────────────────
 	let flowMonths = $derived.by(() => {
 		return ((moneyFlowData?.months as Array<Record<string, unknown>>) ?? []);
 	});
 
+	let filteredFlowMonths = $derived.by(() => {
+		const currentYear = new Date().getFullYear();
+		if (flowPeriod === '6months') return flowMonths.slice(-6);
+		return flowMonths.filter(m => (m.year as number) === currentYear);
+	});
+
 	let chartMax = $derived.by(() => {
-		if (!flowMonths.length) return 15000;
-		const max = Math.max(...flowMonths.map(m => Math.max((m.income as number) ?? 0, (m.expense as number) ?? 0)));
+		if (!filteredFlowMonths.length) return 15000;
+		const max = Math.max(...filteredFlowMonths.map(m => Math.max((m.income as number) ?? 0, (m.expense as number) ?? 0)));
 		return Math.ceil(max / 5000) * 5000 || 15000;
 	});
 
-	// ── Recent transactions (top 8) ───────────────────────────────────────────────
+	// ── Re-fetch money flow when account filter changes ───────────────────────────
+	$effect(() => {
+		const account = flowAccount;
+		const controller = new AbortController();
+		const params = new URLSearchParams({ months: '12' });
+		if (account) params.set('institution', account);
+		fetch(`/api/plaid/money-flow?${params}`, { signal: controller.signal })
+			.then(async (res) => { if (res.ok) moneyFlowData = await res.json(); })
+			.catch((e: unknown) => { if ((e as { name?: string }).name === 'AbortError') return; });
+		return () => controller.abort();
+	});
+
+	// ── Recent transactions (top 8, filtered by account) ─────────────────────────
+	let txnInstitutions = $derived.by(() => {
+		const txns = (txnData?.added as Array<Record<string, unknown>>) ?? [];
+		return [...new Set<string>(txns.map(t => String(t.institution_name ?? '')).filter(Boolean))];
+	});
+
 	let recentTxns = $derived.by(() =>
 		((txnData?.added as Array<Record<string, unknown>>) ?? [])
 			.filter(t => !t.error && t.date && t.amount != null)
+			.filter(t => !txnAccountFilter || t.institution_name === txnAccountFilter)
 			.slice(0, 8)
 	);
 </script>
@@ -294,7 +331,7 @@
 					</div>
 				</div>
 
-				{#if flowMonths.length === 0}
+				{#if filteredFlowMonths.length === 0}
 					<p class="empty-note">No transaction history available.</p>
 				{:else}
 					<div class="chart-wrap">
@@ -313,8 +350,8 @@
 							<text x="48" y="264" text-anchor="end" class="axis-label">$0</text>
 
 							<!-- Bars per month -->
-							{#each flowMonths as m, idx}
-								{@const groupW = 635 / flowMonths.length}
+							{#each filteredFlowMonths as m, idx}
+								{@const groupW = 635 / filteredFlowMonths.length}
 								{@const gx = 55 + groupW * idx}
 								{@const barW = Math.min(30, groupW * 0.34)}
 								{@const gap = 4}
@@ -341,7 +378,7 @@
 								/>
 
 								<!-- Permanent value label on the tallest bar of the middle month -->
-								{#if idx === Math.floor(flowMonths.length / 2) && inc > 0}
+								{#if idx === Math.floor(filteredFlowMonths.length / 2) && inc > 0}
 									<g class="bar-label-group">
 										<rect x={b1x - 6} y={260 - incH - 28} width={barW + 16} height="22" rx="6" fill="var(--text-primary)" />
 										<text x={b1x + barW / 2 + 2} y={260 - incH - 13} text-anchor="middle" fill="#fff" font-size="10.5" font-weight="700">
@@ -409,10 +446,13 @@
 				<div class="card-header">
 					<h2>Recent transactions</h2>
 					<div class="txn-controls">
-						<select class="filter-select">
-							<option>All accounts</option>
+						<select class="filter-select" bind:value={txnAccountFilter}>
+							<option value="">All accounts</option>
+							{#each txnInstitutions as inst}
+								<option value={inst}>{inst}</option>
+							{/each}
 						</select>
-						<button class="see-all-btn">See all <span class="see-arrow">›</span></button>
+						<button class="see-all-btn" onclick={() => (txnModalOpen = true)}>See all <span class="see-arrow">›</span></button>
 					</div>
 				</div>
 				{#if recentTxns.length === 0}
@@ -471,6 +511,8 @@
 
 	{/if}
 </div>
+
+<TransactionsModal bind:open={txnModalOpen} />
 
 <style>
 	/* ── Page shell ─────────────────────────────────────────────────────────── */

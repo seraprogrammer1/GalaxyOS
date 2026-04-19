@@ -10,7 +10,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	if (locals.session.role !== 'admin') return json({ error: 'Admin access required' }, { status: 403 });
 
 	const owner = new mongoose.Types.ObjectId(locals.session.user_id);
-	const months = Math.min(parseInt(url.searchParams.get('months') ?? '7', 10), 24);
+	const months = Math.min(parseInt(url.searchParams.get('months') ?? '12', 10), 24);
+	const institution = url.searchParams.get('institution') ?? '';
 
 	// Build month buckets going back N months
 	const now = new Date();
@@ -29,11 +30,10 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const earliest = buckets[0];
 	const startDate = `${earliest.year}-${String(earliest.month).padStart(2, '0')}-01`;
 
-	const txns = await FinancialTransaction.find({
-		owner,
-		pending: false,
-		date: { $gte: startDate }
-	}).lean();
+	const txnFilter: Record<string, unknown> = { owner, pending: false, date: { $gte: startDate } };
+	if (institution) txnFilter.institution_name = institution;
+
+	const txns = await FinancialTransaction.find(txnFilter).lean();
 
 	for (const t of txns) {
 		if (EXCLUDE_CATEGORIES.includes(t.category_primary)) continue;

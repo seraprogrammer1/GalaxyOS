@@ -13,6 +13,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '100', 10), 500);
 	const offset = parseInt(url.searchParams.get('offset') ?? '0', 10);
 	const category = url.searchParams.get('category') ?? '';
+	const institution = url.searchParams.get('institution') ?? '';
+	const search = url.searchParams.get('search') ?? '';
 
 	// Cold-start: trigger sync if no transactions yet
 	const count = await FinancialTransaction.countDocuments({ owner });
@@ -25,6 +27,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 
 	const filter: Record<string, unknown> = { owner };
 	if (category) filter.category_primary = category;
+	if (institution) filter.institution_name = institution;
+	if (search) filter.name = { $regex: search, $options: 'i' };
 
 	const [added, total] = await Promise.all([
 		FinancialTransaction.find(filter).sort({ date: -1 }).skip(offset).limit(limit).lean(),
