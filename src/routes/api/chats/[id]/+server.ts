@@ -2,7 +2,57 @@ import { json } from '@sveltejs/kit';
 import { connectDB } from '$lib/server/db';
 import { Chat } from '$lib/server/models/Chat';
 import { Character } from '$lib/server/models/Character';
+import { Lorebook } from '$lib/server/models/Lorebook';
 import type { RequestHandler } from '@sveltejs/kit';
+
+const VALID_ROLES = new Set(['user', 'assistant', 'system']);
+
+function isTailMessage(v: unknown): v is { role: string; content: string } {
+	return (
+		typeof v === 'object' &&
+		v !== null &&
+		VALID_ROLES.has((v as Record<string, unknown>).role as string) &&
+		typeof (v as Record<string, unknown>).content === 'string'
+	);
+}
+
+function normalizeMessage(msg: unknown): Record<string, unknown> | null {
+	if (typeof msg !== 'object' || msg === null) return null;
+	const m = msg as Record<string, unknown>;
+	if (!VALID_ROLES.has(m.role as string) || typeof m.content !== 'string') return null;
+
+	const normalized: Record<string, unknown> = { role: m.role, content: m.content };
+
+	if ('variants' in m) {
+		if (!Array.isArray(m.variants)) return null;
+		const variants = m.variants.map((variant) => {
+			if (typeof variant !== 'object' || variant === null) return null;
+			const v = variant as Record<string, unknown>;
+			if (typeof v.content !== 'string' || !Array.isArray(v.tail) || !v.tail.every(isTailMessage)) {
+				return null;
+			}
+			return {
+				content: v.content,
+				tail: v.tail.map((tailMessage) => {
+					const t = tailMessage as Record<string, unknown>;
+					return { role: t.role, content: t.content };
+				})
+			};
+		});
+		if (variants.some((variant) => variant === null)) return null;
+		normalized.variants = variants;
+	}
+
+	if ('activeVariant' in m) {
+		if (!Number.isInteger(m.activeVariant)) return null;
+		if (!Array.isArray(normalized.variants)) return null;
+		const activeVariant = m.activeVariant as number;
+		if (activeVariant < 0 || activeVariant >= normalized.variants.length) return null;
+		normalized.activeVariant = activeVariant;
+	}
+
+	return normalized;
+}
 
 export const GET: RequestHandler = async ({ params, locals }) => {
 	if (!locals.session) {
@@ -31,8 +81,24 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 	const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
 	const title = typeof body.title === 'string' ? body.title.trim() : null;
 	const rawMessages = Array.isArray(body.messages) ? (body.messages as unknown[]) : null;
-	const characterId = 'character_id' in body ? (body.character_id as string | null) : undefined;
-	const lorebookId = 'lorebook_id' in body ? (body.lorebook_id as string | null) : undefined;
+	const hasCharacterId = 'character_id' in body;
+	const hasLorebookId = 'lorebook_id' in body;
+	const characterId =
+		!hasCharacterId
+			? undefined
+			: body.character_id === null
+				? null
+				: typeof body.character_id === 'string'
+					? body.character_id.trim()
+					: undefined;
+	const lorebookId =
+		!hasLorebookId
+			? undefined
+			: body.lorebook_id === null
+				? null
+				: typeof body.lorebook_id === 'string'
+					? body.lorebook_id.trim()
+					: undefined;
 	const systemPrompt = typeof body.system_prompt === 'string' ? body.system_prompt : undefined;
 	const postHistoryInstructions =
 		typeof body.post_history_instructions === 'string'
@@ -64,17 +130,16 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		return json({ error: 'No valid fields provided' }, { status: 400 });
 	}
 
+	if (hasCharacterId && characterId === undefined) {
+		return json({ error: 'character_id must be a string or null' }, { status: 400 });
+	}
+
+	if (hasLorebookId && lorebookId === undefined) {
+		return json({ error: 'lorebook_id must be a string or null' }, { status: 400 });
+	}
+
 	if (rawMessages !== null) {
-		const valid = rawMessages.every(
-			(m) =>
-				m !== null &&
-				typeof m === 'object' &&
-				['user', 'assistant', 'system'].includes(
-					(m as Record<string, unknown>).role as string
-				) &&
-				typeof (m as Record<string, unknown>).content === 'string'
-		);
-		if (!valid) {
+		if (!rawMessages.every((m) => normalizeMessage(m) !== null)) {
 			return json({ error: 'Invalid messages array' }, { status: 400 });
 		}
 	}
@@ -94,17 +159,21 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 
 	if (title !== null && title.length > 0) c.title = title;
 	if (rawMessages !== null)
-		c.messages = rawMessages.map((m) => {
-			const msg = m as Record<string, unknown>;
-			const mapped: Record<string, unknown> = {
-				role: msg.role,
-				content: msg.content
-			};
-			if (Array.isArray(msg.variants)) mapped.variants = msg.variants;
-			if (typeof msg.activeVariant === 'number') mapped.activeVariant = msg.activeVariant;
-			return mapped;
-		});
-	if (characterId !== undefined) c.character_id = characterId || null;
+		c.messages = rawMessages.map((m) => normalizeMessage(m)).filter((m) => m !== null);
+
+	let assignedCharacterDoc: Record<string, unknown> | null = null;
+	if (characterId !== undefined) {
+		if (characterId) {
+			assignedCharacterDoc = (await Character.findOne({
+				_id: characterId,
+				owner: locals.session.user_id
+			}).lean()) as Record<string, unknown> | null;
+			if (!assignedCharacterDoc) {
+				return json({ error: 'Character not found' }, { status: 404 });
+			}
+		}
+		c.character_id = characterId || null;
+	}
 
 	// Seed greeting when assigning a character to an empty chat
 	if (
@@ -113,7 +182,7 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		(c.messages as unknown[]).length === 0
 	) {
 		try {
-			const charDoc = await Character.findById(characterId).lean() as Record<string, unknown> | null;
+			const charDoc = assignedCharacterDoc;
 			if (charDoc && typeof charDoc.first_message === 'string' && charDoc.first_message.trim()) {
 				const firstMsg = charDoc.first_message.trim();
 				const alts = Array.isArray(charDoc.alternate_greetings)
@@ -132,7 +201,18 @@ export const PATCH: RequestHandler = async ({ request, params, locals }) => {
 		// Auto-default to Chub when assigning a character (if no explicit provider set)
 		if (provider === undefined && !c.provider) c.provider = 'chub';
 	}
-	if (lorebookId !== undefined) c.lorebook_id = lorebookId || null;
+	if (lorebookId !== undefined) {
+		if (lorebookId) {
+			const lorebook = await Lorebook.findOne({
+				_id: lorebookId,
+				owner: locals.session.user_id
+			}).lean();
+			if (!lorebook) {
+				return json({ error: 'Lorebook not found' }, { status: 404 });
+			}
+		}
+		c.lorebook_id = lorebookId || null;
+	}
 	if (systemPrompt !== undefined) c.system_prompt = systemPrompt;
 	if (postHistoryInstructions !== undefined) c.post_history_instructions = postHistoryInstructions;
 	if (assistantPrefill !== undefined) c.assistant_prefill = assistantPrefill;

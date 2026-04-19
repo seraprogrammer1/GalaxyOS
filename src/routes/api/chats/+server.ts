@@ -64,16 +64,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			_id: characterId,
 			owner: locals.session.user_id
 		});
-		if (character) {
-			characterName = String(character.name);
-			firstMessage =
-				typeof character.first_message === 'string' && character.first_message.trim()
-					? character.first_message.trim()
-					: null;
-			linkedLorebookId = character.linked_lorebook_id
-				? String(character.linked_lorebook_id)
-				: null;
+		if (!character) {
+			return json({ error: 'Character not found' }, { status: 404 });
 		}
+		characterName = String(character.name);
+		firstMessage =
+			typeof character.first_message === 'string' && character.first_message.trim()
+				? character.first_message.trim()
+				: null;
+		linkedLorebookId = character.linked_lorebook_id
+			? String(character.linked_lorebook_id)
+			: null;
 	}
 
 	// Determine title: explicit > character name > default
@@ -107,10 +108,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		title,
 		owner: locals.session.user_id,
 		messages,
-		character_id: characterId,
+		character_id: character ? characterId : null,
 		lorebook_id: linkedLorebookId,
 		// Default to Chub when starting a chat with a character
-		provider: characterId ? 'chub' : null
+		provider: character ? 'chub' : null
 	});
 
 	return json(chat, { status: 201 });

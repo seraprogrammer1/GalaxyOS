@@ -201,7 +201,6 @@
                 height: 100%;
                 min-height: 0;
 		overflow: hidden;
-		overflow: hidden;
                 background: var(--bg-glass, rgba(255, 255, 255, 0.6));
                 backdrop-filter: var(--blur-glass);
                 -webkit-backdrop-filter: var(--blur-glass);

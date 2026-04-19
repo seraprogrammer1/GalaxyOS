@@ -84,12 +84,12 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 
 	const [providerConfig, character] = await Promise.all([
 		loadProviderConfig(locals.session.user_id, chatDoc.provider),
-		loadCharacter(chatDoc.character_id)
+		loadCharacter(chatDoc.character_id, locals.session.user_id)
 	]);
 
 	let aiText: string;
 	try {
-		const assembled = await assembleMessages(historyWindow, chatDoc, character);
+		const assembled = await assembleMessages(historyWindow, chatDoc, character, locals.session.user_id);
 		aiText = await callAI(assembled, providerConfig);
 	} catch (e) {
 		// Restore the tail on failure so the chat state stays consistent

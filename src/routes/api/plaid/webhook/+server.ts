@@ -8,21 +8,20 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 
-const PYTHON_BASE = 'http://127.0.0.1:8000';
+const PYTHON_BASE = (process.env.PYTHON_AI_SERVICE_URL ?? 'http://127.0.0.1:8000').replace(/\/+$/, '');
 
 export const POST: RequestHandler = async ({ request }) => {
-	let body: unknown;
-	try {
-		body = await request.json();
-	} catch {
-		return json({ error: 'Invalid JSON' }, { status: 400 });
-	}
+	const rawBody = await request.text();
+	const contentType = request.headers.get('content-type') ?? 'application/json';
+	const plaidVerification = request.headers.get('plaid-verification');
 
 	try {
+		const headers: Record<string, string> = { 'Content-Type': contentType };
+		if (plaidVerification) headers['Plaid-Verification'] = plaidVerification;
 		const res = await fetch(`${PYTHON_BASE}/api/plaid/webhook`, {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(body)
+			headers,
+			body: rawBody
 		});
 		const data = await res.json().catch(() => ({}));
 		return json(data, { status: res.status });

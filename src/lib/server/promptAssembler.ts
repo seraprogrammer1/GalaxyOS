@@ -9,6 +9,9 @@ import { UserSettings } from '$lib/server/models/UserSettings';
 import { runLorebookEngine } from '$lib/server/lorebookEngine';
 import { applyMacros } from '$lib/server/macroEngine';
 
+const PYTHON_BASE = (process.env.PYTHON_AI_SERVICE_URL ?? 'http://127.0.0.1:8000').replace(/\/+$/, '');
+const PYTHON_TIMEOUT_MS = Number.parseInt(process.env.PYTHON_AI_TIMEOUT_MS ?? '15000', 10) || 15000;
+
 export interface StoredMessage {
 	role: 'user' | 'assistant' | 'system';
 	content: string;
@@ -74,11 +77,14 @@ export async function loadProviderConfig(
 	return { provider, geminiModel, chubModel };
 }
 
-/** Load character document by ID. Returns null if not found or on error. */
-export async function loadCharacter(characterId: unknown): Promise<Record<string, unknown> | null> {
+/** Load character document by ID for the owning user. Returns null if not found or on error. */
+export async function loadCharacter(
+	characterId: unknown,
+	userId: unknown
+): Promise<Record<string, unknown> | null> {
 	if (!characterId) return null;
 	try {
-		const charDoc = await Character.findById(characterId).lean();
+		const charDoc = await Character.findOne({ _id: characterId, owner: userId }).lean();
 		return charDoc ? (charDoc as Record<string, unknown>) : null;
 	} catch { return null; }
 }
@@ -94,13 +100,17 @@ export async function loadCharacter(characterId: unknown): Promise<Record<string
 export async function assembleMessages(
 	history: StoredMessage[],
 	config: ChatConfig,
-	character: Record<string, unknown> | null
+	character: Record<string, unknown> | null,
+	userId: unknown
 ): Promise<StoredMessage[]> {
 	// Resolve lorebook entries
 	let lorebookEntries: string[] = [];
 	if (config.lorebook_id) {
 		try {
-			const lb = await Lorebook.findById(config.lorebook_id).lean() as Record<string, unknown> | null;
+			const lb = await Lorebook.findOne({
+				_id: config.lorebook_id,
+				owner: userId
+			}).lean() as Record<string, unknown> | null;
 			if (lb) {
 				lorebookEntries = runLorebookEngine(
 					{
@@ -179,16 +189,25 @@ export async function callAI(
 		| string
 		| { text?: string; message?: string; detail?: string };
 
-	const pythonResponse = await fetch('http://127.0.0.1:8000/api/generate', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({
-			messages: assembled,
-			provider: providerConfig.provider,
-			gemini_model: providerConfig.geminiModel,
-			chub_model: providerConfig.chubModel
-		})
-	});
+	let pythonResponse: Response;
+	try {
+		pythonResponse = await fetch(`${PYTHON_BASE}/api/generate`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				messages: assembled,
+				provider: providerConfig.provider,
+				gemini_model: providerConfig.geminiModel,
+				chub_model: providerConfig.chubModel
+			}),
+			signal: AbortSignal.timeout(PYTHON_TIMEOUT_MS)
+		});
+	} catch (error) {
+		if (error instanceof Error && error.name === 'TimeoutError') {
+			throw new Error('AI service timed out');
+		}
+		throw new Error('AI service unreachable');
+	}
 
 	if (!pythonResponse.ok) {
 		const errBody = await pythonResponse.json().catch(() => ({ detail: 'AI service error' })) as { detail?: string };

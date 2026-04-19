@@ -6,6 +6,9 @@ const { mockChatFind, mockChatCreate, mockChatFindOne } = vi.hoisted(() => ({
 	mockChatCreate: vi.fn(),
 	mockChatFindOne: vi.fn()
 }));
+const { mockCharacterFindOne } = vi.hoisted(() => ({
+	mockCharacterFindOne: vi.fn()
+}));
 
 vi.mock('$lib/server/models/Chat', () => ({
 	Chat: {
@@ -15,6 +18,11 @@ vi.mock('$lib/server/models/Chat', () => ({
 	}
 }));
 vi.mock('$lib/server/db', () => ({ connectDB: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('$lib/server/models/Character', () => ({
+	Character: {
+		findOne: mockCharacterFindOne
+	}
+}));
 
 const userId = new mongoose.Types.ObjectId().toString();
 const otherUserId = new mongoose.Types.ObjectId().toString();
@@ -41,6 +49,7 @@ const makeEvent = ({
 		headers: body ? { 'Content-Type': 'application/json' } : {},
 		body: body ? JSON.stringify(body) : undefined
 	}),
+	url: new URL('http://localhost/api/chats'),
 	locals: {
 		session: session !== undefined ? session : makeSession(),
 		user: null
@@ -94,6 +103,7 @@ describe('POST /api/chats', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		mockChatCreate.mockReset();
+		mockCharacterFindOne.mockReset();
 	});
 
 	it('creates a chat with owner from session', async () => {
@@ -105,6 +115,17 @@ describe('POST /api/chats', () => {
 		expect(mockChatCreate).toHaveBeenCalledWith(
 			expect.objectContaining({ title: 'Thread A', owner: userId })
 		);
+	});
+
+	it('returns 404 when character_id is provided but not owned', async () => {
+		mockCharacterFindOne.mockResolvedValue(null);
+		const { POST } = await import('./+server');
+		const res = await POST(
+			makeEvent({ method: 'POST', body: { character_id: new mongoose.Types.ObjectId().toString() } }) as never
+		);
+
+		expect(res.status).toBe(404);
+		expect(mockChatCreate).not.toHaveBeenCalled();
 	});
 });
 

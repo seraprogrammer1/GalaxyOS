@@ -44,7 +44,7 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 
 	const [providerConfig, character] = await Promise.all([
 		loadProviderConfig(locals.session.user_id, chatDoc.provider),
-		loadCharacter(chatDoc.character_id)
+		loadCharacter(chatDoc.character_id, locals.session.user_id)
 	]);
 
 	const contextSize = chatDoc.context_size ?? 50;
@@ -54,7 +54,7 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 
 	let aiText: string;
 	try {
-		const assembled = await assembleMessages(historyWindow, chatDoc, character);
+		const assembled = await assembleMessages(historyWindow, chatDoc, character, locals.session.user_id);
 		aiText = await callAI(assembled, providerConfig);
 	} catch (e) {
 		const msg = e instanceof Error ? e.message : 'AI service error';

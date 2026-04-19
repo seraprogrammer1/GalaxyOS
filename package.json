@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "dev:python": "cmd /c \"cd /d python-ai-service && ..\\.venv\\Scripts\\activate.bat && uvicorn main:app --reload --port 8000\"",
+    "dev:python": "cmd /c \"cd /d python-ai-service && venv\\Scripts\\activate.bat && uvicorn main:app --reload --port 8000\"",
     "dev:all": "run-p dev dev:python",
     "build": "vite build",
     "preview": "vite preview",
@@ -33,6 +33,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
     "@types/bcrypt": "^6.0.0",
+    "@types/dompurify": "^3.0.5",
     "@types/jsonwebtoken": "^9.0.10",
     "eslint": "^10.2.0",
     "eslint-plugin-svelte": "^3.17.0",
@@ -52,7 +53,6 @@
     "vitest": "^4.1.4"
   },
   "dependencies": {
-    "@types/dompurify": "^3.0.5",
     "bcrypt": "^6.0.0",
     "dompurify": "^3.3.3",
     "dotenv": "^17.4.1",
