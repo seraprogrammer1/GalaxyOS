@@ -40,17 +40,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const encryptedToken = encrypt(access_token);
 	const owner = new mongoose.Types.ObjectId(locals.session.user_id);
 
+	// Check if item already exists before upserting to determine status
+	const isNew = !(await PlaidItem.exists({ item_id }));
+
 	// Upsert — handles re-link scenario
-	const existing = await PlaidItem.findOneAndUpdate(
+	const savedItem = await PlaidItem.findOneAndUpdate(
 		{ item_id },
 		{ $set: { access_token: encryptedToken, institution_name: institutionName, institution_id: institutionId, products, owner } },
 		{ new: true, upsert: true }
 	);
 
-	const status = existing ? 'updated' : 'success';
+	const status = isNew ? 'success' : 'updated';
 
 	// Fire-and-forget background sync
-	fullSync(existing).catch((e) => console.error('[exchange-token] fullSync error:', e));
+	fullSync(savedItem).catch((e) => console.error('[exchange-token] fullSync error:', e));
 
 	return json({ status, item_id });
 };

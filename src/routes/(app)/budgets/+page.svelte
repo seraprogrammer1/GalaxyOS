@@ -112,10 +112,19 @@
 
 	let monthlyIncome = $derived.by(() => {
 		const inflows = (recurringData?.inflow_streams as Array<Record<string, unknown>>) ?? [];
+		const freqMultiplier: Record<string, number> = {
+			WEEKLY:       4.33,
+			BIWEEKLY:     2.17,
+			SEMI_MONTHLY: 2,
+			MONTHLY:      1,
+			QUARTERLY:    1 / 3,
+			ANNUALLY:     1 / 12,
+		};
 		return inflows.reduce((s, f) => {
-			const amt = Math.abs((f.average_amount as Record<string, number>).amount ?? 0);
+			const amt = Math.abs((f.average_amount as Record<string, number>)?.amount ?? 0);
 			const freq = String(f.frequency ?? '');
-			return s + (freq === 'BIWEEKLY' ? amt * 2.17 : amt);
+			const multiplier = freqMultiplier[freq] ?? 1;
+			return s + amt * multiplier;
 		}, 0);
 	});
 
@@ -321,12 +330,15 @@
 							<span class="legend-pill"><span class="legend-swatch income-swatch"></span> Income</span>
 							<span class="legend-pill"><span class="legend-swatch expense-swatch"></span> Expense</span>
 						</div>
-						<select class="filter-select">
-							<option>All accounts</option>
+						<select class="filter-select" bind:value={flowAccount}>
+							<option value="">All accounts</option>
+							{#each institutionsList as inst}
+								<option value={inst}>{inst}</option>
+							{/each}
 						</select>
-						<select class="filter-select">
-							<option>This year</option>
-							<option>Last 6 months</option>
+						<select class="filter-select" bind:value={flowPeriod}>
+							<option value="year">This year</option>
+							<option value="6months">Last 6 months</option>
 						</select>
 					</div>
 				</div>

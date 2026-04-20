@@ -9,8 +9,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 	const owner = new mongoose.Types.ObjectId(locals.session.user_id);
 	const now = new Date();
-	const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-	const endOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-31`;
+	const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+	const mm = String(now.getMonth() + 1).padStart(2, '0');
+	const startOfMonth = `${now.getFullYear()}-${mm}-01`;
+	const endOfMonth = `${now.getFullYear()}-${mm}-${String(lastDay).padStart(2, '0')}`;
 
 	const EXCLUDE_CATEGORIES = ['TRANSFER_IN', 'TRANSFER_OUT', 'LOAN_PAYMENTS', 'BANK_FEES'];
 

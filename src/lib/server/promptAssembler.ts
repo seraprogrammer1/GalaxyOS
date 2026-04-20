@@ -181,14 +181,56 @@ export async function assembleMessages(
 /** Call the configured AI provider and return the generated text. */
 export async function callAI(
 	assembled: StoredMessage[],
-	providerConfig: ProviderConfig
+	providerConfig: ProviderConfig,
+	prefill?: string
 ): Promise<string> {
 	const text = await callProvider(
 		assembled as import('$lib/server/aiProviders').AIMessage[],
 		providerConfig.provider,
 		providerConfig.geminiModel,
-		providerConfig.chubModel
+		providerConfig.chubModel,
+		prefill
 	);
 	if (!text) throw new Error('Invalid AI response');
 	return text;
+}
+
+/**
+ * Extract structured detail from any AI-SDK / fetch error so the chat endpoints
+ * can return actionable info (statusCode, url, upstream response body) instead
+ * of a bare "Not Found" string.
+ */
+export function describeAIError(e: unknown): {
+	message: string;
+	statusCode?: number;
+	url?: string;
+	responseBody?: string;
+	cause?: string;
+} {
+	if (!e || typeof e !== 'object') {
+		return { message: typeof e === 'string' ? e : 'AI service error' };
+	}
+	const err = e as Record<string, unknown>;
+	const out: {
+		message: string;
+		statusCode?: number;
+		url?: string;
+		responseBody?: string;
+		cause?: string;
+	} = {
+		message: typeof err.message === 'string' ? err.message : 'AI service error'
+	};
+	if (typeof err.statusCode === 'number') out.statusCode = err.statusCode;
+	if (typeof err.url === 'string') out.url = err.url;
+	if (typeof err.responseBody === 'string' && err.responseBody.length > 0) {
+		// Truncate very large bodies so we don't flood the client
+		out.responseBody = err.responseBody.length > 2000
+			? err.responseBody.slice(0, 2000) + '…[truncated]'
+			: err.responseBody;
+	}
+	if (err.cause && typeof err.cause === 'object') {
+		const c = err.cause as Record<string, unknown>;
+		if (typeof c.message === 'string') out.cause = c.message;
+	}
+	return out;
 }
