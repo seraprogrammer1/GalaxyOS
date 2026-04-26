@@ -209,6 +209,18 @@
 		flex-direction: column;
 		gap: 1.5rem;
 		overflow-y: auto;
+		scrollbar-width: thin;
+		scrollbar-color: var(--accent-primary-soft, rgba(232, 116, 138, 0.3)) transparent;
+	}
+	.settings-page::-webkit-scrollbar {
+		width: 5px;
+	}
+	.settings-page::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	.settings-page::-webkit-scrollbar-thumb {
+		background: var(--accent-primary-soft, rgba(232, 116, 138, 0.3));
+		border-radius: 99px;
 	}
 
 	.settings-header {
@@ -383,5 +395,12 @@
 		outline: none;
 		border-color: var(--accent-primary, #ff6b8b);
 		box-shadow: 0 0 0 3px rgba(255, 107, 139, 0.15);
+	}
+
+	:global([data-theme='dark']) .model-select {
+		background-color: var(--bg-surface, #1d1f29);
+		border-color: var(--bg-glass-border, rgba(255, 255, 255, 0.10));
+		color: var(--text-primary, #e1e1ef);
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a0a0c0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 	}
 </style>

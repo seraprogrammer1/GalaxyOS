@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import { page } from '$app/stores';
 	import { get } from 'svelte/store';
+	import { goto } from '$app/navigation';
 	import ChatInput from '$lib/components/features/chat/ChatInput.svelte';
 	import MessageFeed from '$lib/components/features/chat/MessageFeed.svelte';
 
@@ -123,6 +124,7 @@
 
 	function selectThread(id: string): void {
 		activeChatId = id;
+		void goto(`/chat?id=${id}`, { replaceState: true, noScroll: true, keepFocus: true });
 	}
 
 	async function createThread(): Promise<void> {
@@ -830,6 +832,18 @@
 		list-style: none;
 		padding: 0.2rem 0 0.5rem;
 		margin: 0;
+		scrollbar-width: thin;
+		scrollbar-color: var(--accent-primary-soft, rgba(232, 116, 138, 0.3)) transparent;
+	}
+	.thread-list::-webkit-scrollbar {
+		width: 5px;
+	}
+	.thread-list::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	.thread-list::-webkit-scrollbar-thumb {
+		background: var(--accent-primary-soft, rgba(232, 116, 138, 0.3));
+		border-radius: 99px;
 	}
 
 	.panel-loading {
@@ -1105,6 +1119,18 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
+		scrollbar-width: thin;
+		scrollbar-color: var(--accent-primary-soft, rgba(232, 116, 138, 0.3)) transparent;
+	}
+	.config-panel-body::-webkit-scrollbar {
+		width: 5px;
+	}
+	.config-panel-body::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	.config-panel-body::-webkit-scrollbar-thumb {
+		background: var(--accent-primary-soft, rgba(232, 116, 138, 0.3));
+		border-radius: 99px;
 	}
 
 	.config-field {

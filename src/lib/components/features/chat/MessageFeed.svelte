@@ -97,6 +97,21 @@
 		border-radius: 1rem;
 		overflow-y: auto;
 		min-height: 0;
+		scrollbar-width: thin;
+		scrollbar-color: var(--accent-primary-soft, rgba(232, 116, 138, 0.3)) transparent;
+	}
+
+	.message-feed::-webkit-scrollbar {
+		width: 5px;
+	}
+
+	.message-feed::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.message-feed::-webkit-scrollbar-thumb {
+		background: var(--accent-primary-soft, rgba(232, 116, 138, 0.3));
+		border-radius: 99px;
 	}
 
 	.empty-state {

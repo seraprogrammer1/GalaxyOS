@@ -60,8 +60,8 @@
 		display: flex;
 		flex-direction: column;
 		padding: 1.25rem 0.875rem;
-		background: #11131c;
-		border-right: 1px solid rgba(255, 255, 255, 0.06);
+		background: var(--bg-base, #11131c);
+		border-right: 1px solid var(--border-subtle);
 	}
 
 	.sidebar-brand {
@@ -69,7 +69,7 @@
 		align-items: center;
 		gap: 0.65rem;
 		padding: 0.25rem 0.375rem 1.25rem;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		border-bottom: 1px solid var(--border-subtle);
 		margin-bottom: 0.75rem;
 	}
 
@@ -86,13 +86,13 @@
 	.brand-text h2 {
 		font-size: 0.95rem;
 		font-weight: 700;
-		color: #e1e1ef;
+		color: var(--text-primary, #e1e1ef);
 		letter-spacing: -0.01em;
 	}
 
 	.brand-text p {
 		font-size: 0.7rem;
-		color: #9d8d8d;
+		color: var(--text-muted, #9d8d8d);
 		margin-top: 0.1rem;
 		letter-spacing: 0.03em;
 	}
@@ -109,7 +109,7 @@
 		align-items: center;
 		gap: 0.65rem;
 		text-decoration: none;
-		color: #a0a0b8;
+		color: var(--text-secondary, #a0a0b8);
 		padding: 0.6rem 0.75rem;
 		border-radius: 10px;
 		font-size: 0.88rem;
@@ -131,8 +131,8 @@
 	}
 
 	.nav-link:hover {
-		background: rgba(255, 255, 255, 0.06);
-		color: #e1e1ef;
+		background: var(--bg-surface);
+		color: var(--text-primary, #e1e1ef);
 	}
 
 	.nav-link:hover .nav-icon {
@@ -142,11 +142,11 @@
 	.nav-link.is-active {
 		background: linear-gradient(
 			135deg,
-			rgba(244, 194, 194, 0.18),
-			rgba(217, 186, 247, 0.14)
+			var(--accent-primary-soft),
+			var(--accent-secondary-soft)
 		);
-		color: #f4c2c2;
-		border-color: rgba(244, 194, 194, 0.22);
+		color: var(--accent-primary, #f4c2c2);
+		border-color: var(--accent-primary-soft);
 	}
 
 	.nav-link.is-active .nav-icon {
@@ -159,8 +159,8 @@
 		gap: 0.65rem;
 		padding: 0.75rem;
 		border-radius: 12px;
-		background: rgba(255, 255, 255, 0.04);
-		border: 1px solid rgba(255, 255, 255, 0.06);
+		background: var(--bg-glass);
+		border: 1px solid var(--border-subtle);
 		margin-top: 0.5rem;
 	}
 
@@ -186,13 +186,13 @@
 	.name {
 		font-size: 0.82rem;
 		font-weight: 600;
-		color: #e1e1ef;
+		color: var(--text-primary, #e1e1ef);
 		letter-spacing: -0.01em;
 	}
 
 	.role {
 		font-size: 0.68rem;
-		color: #9d8d8d;
+		color: var(--text-muted, #9d8d8d);
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
 	}
