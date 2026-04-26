@@ -37,7 +37,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		return json(summary);
 	}
 
-	const chats = await Chat.find({ owner: locals.session.user_id });
+	const chats = await Chat.find({ owner: locals.session.user_id }).sort({ updated_at: -1 });
 	return json(chats);
 };
 

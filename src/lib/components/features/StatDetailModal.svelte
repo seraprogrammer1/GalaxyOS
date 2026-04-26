@@ -301,6 +301,18 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.6rem;
+		scrollbar-width: thin;
+		scrollbar-color: var(--accent-primary-soft, rgba(232, 116, 138, 0.3)) transparent;
+	}
+	.modal-body::-webkit-scrollbar {
+		width: 5px;
+	}
+	.modal-body::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	.modal-body::-webkit-scrollbar-thumb {
+		background: var(--accent-primary-soft, rgba(232, 116, 138, 0.3));
+		border-radius: 99px;
 	}
 
 	.empty {

@@ -71,20 +71,22 @@
 	{:else}
 		<ul class="chat-list">
 			{#each threads as thread (thread.id)}
-				<li class="chat-item" data-testid="chat-thread">
-					<div class="chat-avatar">
-						{thread.name.charAt(0)}
-					</div>
-					<div class="chat-content">
-						<div class="chat-top">
-							<span class="chat-name">{thread.name}</span>
-							<span class="chat-time">{thread.time}</span>
+				<li>
+					<a href="/chat?id={thread.id}" class="chat-item" data-testid="chat-thread">
+						<div class="chat-avatar">
+							{thread.name.charAt(0)}
 						</div>
-						<p class="chat-preview">{thread.lastMessage}</p>
-					</div>
-					{#if thread.unread > 0}
-						<span class="unread-badge">{thread.unread}</span>
-					{/if}
+						<div class="chat-content">
+							<div class="chat-top">
+								<span class="chat-name">{thread.name}</span>
+								<span class="chat-time">{thread.time}</span>
+							</div>
+							<p class="chat-preview">{thread.lastMessage}</p>
+						</div>
+						{#if thread.unread > 0}
+							<span class="unread-badge">{thread.unread}</span>
+						{/if}
+					</a>
 				</li>
 			{/each}
 		</ul>
@@ -154,11 +156,16 @@
 		padding: 0.75rem;
 		border-radius: var(--radius-sm, 8px);
 		background: var(--bg-surface, #f0eef8);
-		transition: background 0.2s ease;
+		border: 1px solid transparent;
+		transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+		text-decoration: none;
+		color: inherit;
 	}
 
 	.chat-item:hover {
-		background: var(--bg-glass-border, rgba(255, 255, 255, 0.85));
+		background: var(--bg-card);
+		border-color: var(--border-subtle);
+		transform: translateX(2px);
 	}
 
 	.chat-avatar {

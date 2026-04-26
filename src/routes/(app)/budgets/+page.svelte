@@ -542,7 +542,17 @@
 		flex-direction: column;
 		gap: 1.25rem;
 		scrollbar-width: thin;
-		scrollbar-color: var(--bg-surface) transparent;
+		scrollbar-color: var(--accent-primary-soft, rgba(232, 116, 138, 0.3)) transparent;
+	}
+	.fin-page::-webkit-scrollbar {
+		width: 5px;
+	}
+	.fin-page::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	.fin-page::-webkit-scrollbar-thumb {
+		background: var(--accent-primary-soft, rgba(232, 116, 138, 0.3));
+		border-radius: 99px;
 	}
 
 	/* ── Header ─────────────────────────────────────────────────────────────── */
