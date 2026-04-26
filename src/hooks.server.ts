@@ -1,6 +1,7 @@
 import { connectDB } from '$lib/server/db';
 import { seedDatabase } from '$lib/server/seeder';
 import { runMigrations } from '$lib/server/migrationRunner';
+import { startSyncScheduler } from '$lib/server/syncScheduler';
 import { Session } from '$lib/server/models/Session';
 import { User } from '$lib/server/models/User';
 import type { Handle } from '@sveltejs/kit';
@@ -14,6 +15,7 @@ async function boot() {
 	await connectDB();
 	await runMigrations(); // apply any pending schema migrations
 	await seedDatabase();
+	startSyncScheduler();
 }
 
 export const handle: Handle = async ({ event, resolve }) => {

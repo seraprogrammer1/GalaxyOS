@@ -6,6 +6,7 @@ import {
 	loadCharacter,
 	assembleMessages,
 	callAI,
+	describeAIError,
 	type StoredMessage
 } from '$lib/server/promptAssembler';
 import type { RequestHandler } from '@sveltejs/kit';
@@ -55,10 +56,26 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 	let aiText: string;
 	try {
 		const assembled = await assembleMessages(historyWindow, chatDoc, character, locals.session.user_id);
-		aiText = await callAI(assembled, providerConfig);
+		aiText = await callAI(assembled, providerConfig, chatDoc.assistant_prefill.trim() || undefined);
 	} catch (e) {
-		const msg = e instanceof Error ? e.message : 'AI service error';
-		return json({ error: msg }, { status: 502 });
+		const detail = describeAIError(e);
+		console.error('[chat message] AI call failed', {
+			provider: providerConfig.provider,
+			model: providerConfig.provider === 'gemini' ? providerConfig.geminiModel : providerConfig.chubModel,
+			...detail,
+			stack: e instanceof Error ? e.stack : undefined
+		});
+		return json(
+			{
+				error: detail.message,
+				provider: providerConfig.provider,
+				statusCode: detail.statusCode,
+				url: detail.url,
+				responseBody: detail.responseBody,
+				cause: detail.cause
+			},
+			{ status: 502 }
+		);
 	}
 
 	// Prepend prefill into stored content so history is self-consistent

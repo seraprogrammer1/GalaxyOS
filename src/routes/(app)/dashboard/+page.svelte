@@ -1,157 +1,171 @@
 <script lang="ts">
 	import Goals from '$lib/components/features/Goals.svelte';
 	import BudgetWidget from '$lib/components/features/BudgetWidget.svelte';
-	import NacaWidget from '$lib/components/features/NacaWidget.svelte';
 	import RecentChatsWidget from '$lib/components/features/RecentChatsWidget.svelte';
 	import { uiStore } from '$lib/stores/ui';
+
+	const now = new Date();
+	const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 </script>
 
-<section
-	class="dashboard-root"
-	class:layout-bento={$uiStore.dashboardLayout === 'bento'}
-	class:layout-sidebar={$uiStore.dashboardLayout === 'sidebar'}
-	class:layout-columns={$uiStore.dashboardLayout === 'columns'}
-	data-layout={$uiStore.dashboardLayout}
-	data-testid="dashboard-root"
->
-	{#if $uiStore.dashboardLayout === 'sidebar'}
-		<div class="sidebar-layout">
-			<aside class="summary-column">
-				<div class="widget-panel compact"><BudgetWidget variant={$uiStore.budgetVariant} /></div>
-				<div class="widget-panel compact"><NacaWidget /></div>
-			</aside>
-			<div class="content-column">
-				<div class="widget-panel tall"><Goals /></div>
-				<div class="widget-panel short"><RecentChatsWidget /></div>
+<div class="dash" data-testid="dashboard-root">
+	<!-- Hero Banner -->
+	<div class="hero glass">
+		<div class="hero-eyebrow"><span aria-hidden="true">✦</span> Mission Control</div>
+		<h2 class="hero-title">Welcome back, Commander</h2>
+		<p class="hero-date">{dateStr}</p>
+	</div>
+
+	<!-- Card Grid -->
+	<div class="card-grid">
+		<div class="eth-card glass">
+			<div class="eth-card-header">
+				<span class="card-label">Budget Summary</span>
+				<span class="card-sparkle" aria-hidden="true">✦</span>
+			</div>
+			<div class="eth-card-body">
+				<BudgetWidget variant={$uiStore.budgetVariant} />
 			</div>
 		</div>
-	{:else if $uiStore.dashboardLayout === 'columns'}
-		<div class="columns-layout">
-			<div class="widget-panel"><Goals /></div>
-			<div class="widget-panel"><RecentChatsWidget /></div>
-			<div class="widget-panel"><BudgetWidget variant={$uiStore.budgetVariant} /></div>
-			<div class="widget-panel"><NacaWidget /></div>
+
+		<div class="eth-card glass">
+			<div class="eth-card-header">
+				<span class="card-label">Recent AI Activity</span>
+				<span class="card-sparkle" aria-hidden="true">✦</span>
+			</div>
+			<div class="eth-card-body">
+				<RecentChatsWidget />
+			</div>
 		</div>
-	{:else}
-		<div class="bento-layout">
-			<div class="widget-panel goals-cell"><Goals /></div>
-			<div class="widget-panel chats-cell"><RecentChatsWidget /></div>
-			<div class="widget-panel budget-cell"><BudgetWidget variant={$uiStore.budgetVariant} /></div>
-			<div class="widget-panel naca-cell"><NacaWidget /></div>
+
+		<div class="eth-card glass">
+			<div class="eth-card-header">
+				<span class="card-label">Goals &amp; Progress</span>
+				<span class="card-sparkle" aria-hidden="true">✦</span>
+			</div>
+			<div class="eth-card-body">
+				<Goals />
+			</div>
 		</div>
-	{/if}
-</section>
+	</div>
+</div>
 
 <style>
-	.dashboard-root {
-		height: 100%;
-		min-height: 0;
-	}
-
-	.widget-panel {
-		height: 100%;
-		min-height: 0;
+	.dash {
 		display: flex;
-	}
-
-	.widget-panel > :global(section) {
-		width: 100%;
-		height: 100%;
-	}
-
-	.sidebar-layout {
+		flex-direction: column;
+		gap: 1.25rem;
 		height: 100%;
 		min-height: 0;
-		display: flex;
-		gap: 1rem;
+		overflow-y: auto;
 	}
 
-	.summary-column {
-		width: 16rem;
-		min-width: 16rem;
+	/* ── Hero ── */
+	.hero {
+		padding: 1.5rem 2rem;
+		border-radius: var(--radius-xl);
+		background: linear-gradient(
+			120deg,
+			rgba(244, 194, 194, 0.55) 0%,
+			rgba(217, 186, 247, 0.42) 50%,
+			rgba(180, 198, 252, 0.38) 100%
+		);
+	}
+
+	:global([data-theme='dark']) .hero {
+		background: linear-gradient(
+			120deg,
+			rgba(120, 40, 80, 0.35) 0%,
+			rgba(80, 40, 120, 0.30) 50%,
+			rgba(40, 60, 120, 0.25) 100%
+		);
+	}
+
+	.hero-eyebrow {
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--accent-primary);
+		margin-bottom: 0.4rem;
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+
+	.hero-title {
+		font-size: 1.55rem;
+		font-weight: 700;
+		color: var(--text-primary);
+		letter-spacing: -0.025em;
+		margin-bottom: 0.3rem;
+	}
+
+	.hero-date {
+		font-size: 0.82rem;
+		color: var(--text-muted);
+		font-weight: 400;
+	}
+
+	/* ── Card Grid ── */
+	.card-grid {
 		display: grid;
-		grid-template-rows: 1fr 1fr;
-		gap: 1rem;
-	}
-
-	.content-column {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 1.25rem;
 		flex: 1;
-		min-width: 0;
-		display: grid;
-		grid-template-rows: 2fr 1fr;
-		gap: 1rem;
-	}
-
-	.columns-layout {
-		height: 100%;
 		min-height: 0;
-		display: grid;
-		grid-template-columns: repeat(1, minmax(0, 1fr));
-		gap: 1rem;
 	}
 
-	@media (min-width: 900px) {
-		.columns-layout {
+	@media (max-width: 1100px) {
+		.card-grid {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 	}
 
-	.bento-layout {
-		height: 100%;
+	@media (max-width: 720px) {
+		.card-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	/* ── Card ── */
+	.eth-card {
+		display: flex;
+		flex-direction: column;
+		border-radius: var(--radius-xl);
+		overflow: hidden;
+	}
+
+	.eth-card-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.9rem 1.25rem;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.45);
+	}
+
+	:global([data-theme='dark']) .eth-card-header {
+		border-bottom-color: rgba(255, 255, 255, 0.07);
+	}
+
+	.card-label {
+		font-size: 0.82rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-secondary);
+	}
+
+	.card-sparkle {
+		font-size: 0.7rem;
+		color: var(--accent-secondary);
+		opacity: 0.7;
+	}
+
+	.eth-card-body {
+		flex: 1;
 		min-height: 0;
-		display: grid;
-		grid-template-columns: repeat(12, minmax(0, 1fr));
-		grid-template-rows: repeat(6, minmax(0, 1fr));
-		gap: 1rem;
-	}
-
-	.goals-cell {
-		grid-column: span 4;
-		grid-row: span 6;
-	}
-
-	.chats-cell {
-		grid-column: span 5;
-		grid-row: span 4;
-	}
-
-	.budget-cell {
-		grid-column: span 3;
-		grid-row: span 3;
-	}
-
-	.naca-cell {
-		grid-column: span 3;
-		grid-row: span 3;
-	}
-
-	@media (max-width: 1023px) {
-		.sidebar-layout {
-			flex-direction: column;
-		}
-
-		.summary-column {
-			width: 100%;
-			min-width: 0;
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-			grid-template-rows: none;
-		}
-
-		.content-column {
-			grid-template-rows: 1fr 1fr;
-		}
-
-		.bento-layout {
-			grid-template-columns: repeat(1, minmax(0, 1fr));
-			grid-template-rows: none;
-		}
-
-		.goals-cell,
-		.chats-cell,
-		.budget-cell,
-		.naca-cell {
-			grid-column: auto;
-			grid-row: auto;
-		}
+		overflow: hidden;
+		padding: 0.5rem 0;
 	}
 </style>

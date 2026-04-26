@@ -8,9 +8,7 @@ import { Lorebook } from '$lib/server/models/Lorebook';
 import { UserSettings } from '$lib/server/models/UserSettings';
 import { runLorebookEngine } from '$lib/server/lorebookEngine';
 import { applyMacros } from '$lib/server/macroEngine';
-
-const PYTHON_BASE = (process.env.PYTHON_AI_SERVICE_URL ?? 'http://127.0.0.1:8000').replace(/\/+$/, '');
-const PYTHON_TIMEOUT_MS = Number.parseInt(process.env.PYTHON_AI_TIMEOUT_MS ?? '15000', 10) || 15000;
+import { callProvider } from '$lib/server/aiProviders';
 
 export interface StoredMessage {
 	role: 'user' | 'assistant' | 'system';
@@ -152,25 +150,29 @@ export async function assembleMessages(
 	}
 
 	// 3. History + optional post-history instructions
+	// Normalize to plain objects — Mongoose subdocuments carry internal fields that
+	// break serialization when sent to external APIs.
+	const plainHistory: StoredMessage[] = history.map((m) => ({ role: m.role, content: m.content }));
+
 	const phi = config.post_history_instructions.trim();
 	if (phi) {
 		const phiContent = applyMacros(phi, macroCtx);
 		let inserted = false;
-		for (let i = history.length - 1; i >= 0; i--) {
-			if (history[i].role === 'user') {
-				assembled.push(...history.slice(0, i));
+		for (let i = plainHistory.length - 1; i >= 0; i--) {
+			if (plainHistory[i].role === 'user') {
+				assembled.push(...plainHistory.slice(0, i));
 				assembled.push({ role: 'system', content: phiContent });
-				assembled.push(...history.slice(i));
+				assembled.push(...plainHistory.slice(i));
 				inserted = true;
 				break;
 			}
 		}
 		if (!inserted) {
 			assembled.push({ role: 'system', content: phiContent });
-			assembled.push(...history);
+			assembled.push(...plainHistory);
 		}
 	} else {
-		assembled.push(...history);
+		assembled.push(...plainHistory);
 	}
 
 	// 4. Assistant prefill
@@ -180,48 +182,59 @@ export async function assembleMessages(
 	return assembled;
 }
 
-/** Call the Python AI service and return the generated text. */
+/** Call the configured AI provider and return the generated text. */
 export async function callAI(
 	assembled: StoredMessage[],
-	providerConfig: ProviderConfig
+	providerConfig: ProviderConfig,
+	prefill?: string
 ): Promise<string> {
-	type PythonGenerateResponse =
-		| string
-		| { text?: string; message?: string; detail?: string };
+	const text = await callProvider(
+		assembled as import('$lib/server/aiProviders').AIMessage[],
+		providerConfig.provider,
+		providerConfig.geminiModel,
+		providerConfig.chubModel,
+		prefill
+	);
+	if (!text) throw new Error('Invalid AI response');
+	return text;
+}
 
-	let pythonResponse: Response;
-	try {
-		pythonResponse = await fetch(`${PYTHON_BASE}/api/generate`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				messages: assembled,
-				provider: providerConfig.provider,
-				gemini_model: providerConfig.geminiModel,
-				chub_model: providerConfig.chubModel
-			}),
-			signal: AbortSignal.timeout(PYTHON_TIMEOUT_MS)
-		});
-	} catch (error) {
-		if (error instanceof Error && error.name === 'TimeoutError') {
-			throw new Error('AI service timed out');
-		}
-		throw new Error('AI service unreachable');
+/**
+ * Extract structured detail from any AI-SDK / fetch error so the chat endpoints
+ * can return actionable info (statusCode, url, upstream response body) instead
+ * of a bare "Not Found" string.
+ */
+export function describeAIError(e: unknown): {
+	message: string;
+	statusCode?: number;
+	url?: string;
+	responseBody?: string;
+	cause?: string;
+} {
+	if (!e || typeof e !== 'object') {
+		return { message: typeof e === 'string' ? e : 'AI service error' };
 	}
-
-	if (!pythonResponse.ok) {
-		const errBody = await pythonResponse.json().catch(() => ({ detail: 'AI service error' })) as { detail?: string };
-		throw new Error(errBody.detail ?? 'Failed to generate assistant response');
+	const err = e as Record<string, unknown>;
+	const out: {
+		message: string;
+		statusCode?: number;
+		url?: string;
+		responseBody?: string;
+		cause?: string;
+	} = {
+		message: typeof err.message === 'string' ? err.message : 'AI service error'
+	};
+	if (typeof err.statusCode === 'number') out.statusCode = err.statusCode;
+	if (typeof err.url === 'string') out.url = err.url;
+	if (typeof err.responseBody === 'string' && err.responseBody.length > 0) {
+		// Truncate very large bodies so we don't flood the client
+		out.responseBody = err.responseBody.length > 2000
+			? err.responseBody.slice(0, 2000) + '…[truncated]'
+			: err.responseBody;
 	}
-
-	const generated = (await pythonResponse.json()) as PythonGenerateResponse;
-	const aiText =
-		typeof generated === 'string' ? generated
-		: typeof generated === 'object' && generated !== null
-			? (typeof generated.text === 'string' ? generated.text
-				: typeof generated.message === 'string' ? generated.message : '')
-			: '';
-
-	if (!aiText) throw new Error('Invalid AI response');
-	return aiText;
+	if (err.cause && typeof err.cause === 'object') {
+		const c = err.cause as Record<string, unknown>;
+		if (typeof c.message === 'string') out.cause = c.message;
+	}
+	return out;
 }

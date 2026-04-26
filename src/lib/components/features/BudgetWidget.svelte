@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
 	import type { BudgetVariant } from '$lib/stores/ui';
 
 	interface BudgetData {
@@ -21,12 +20,22 @@
 	let fetchError = $state('');
 
 	$effect(() => {
-		if (budget !== undefined) return;
-		untrack(async () => {
-			loading = true;
+		// When a budget prop is provided, clear any stale fetched data and bail out
+		if (budget !== undefined) {
+			fetchedBudget = null;
+			loading = false;
 			fetchError = '';
-			try {
-				const res = await fetch('/api/plaid/budget');
+			return;
+		}
+
+		// Self-fetch path — use AbortController so re-runs and unmount cancel in-flight requests
+		const controller = new AbortController();
+
+		loading = true;
+		fetchError = '';
+
+		fetch('/api/plaid/budget', { signal: controller.signal })
+			.then(async (res) => {
 				if (res.status === 401 || res.status === 403) {
 					fetchError = 'Admin access required';
 					return;
@@ -37,12 +46,17 @@
 					return;
 				}
 				fetchedBudget = await res.json();
-			} catch {
-				fetchError = 'Could not connect to server';
-			} finally {
+			})
+			.catch((e: unknown) => {
+				if ((e as { name?: string }).name !== 'AbortError') {
+					fetchError = 'Could not connect to server';
+				}
+			})
+			.finally(() => {
 				loading = false;
-			}
-		});
+			});
+
+		return () => controller.abort();
 	});
 
 	let activeBudget = $derived(budget ?? fetchedBudget);

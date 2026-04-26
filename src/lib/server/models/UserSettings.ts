@@ -11,6 +11,14 @@ const GEMINI_MODELS = [
 
 const CHUB_MODELS = ['mythomax', 'mixtral', 'asha', 'gemma'] as const;
 
+export const THEME_IDS = [
+	'light-cosmic',
+	'dark',
+	'zootopia',
+	'steven-universe',
+	'home-movie'
+] as const;
+
 export { GEMINI_MODELS, CHUB_MODELS };
 
 const userSettingsSchema = new Schema(
@@ -43,7 +51,12 @@ const userSettingsSchema = new Schema(
 			default: 'mythomax'
 		},
 		/** Display name shown above the user's chat bubbles */
-		chat_name: { type: String, default: '' }
+		chat_name: { type: String, default: '' },
+		theme: {
+			type: String,
+			enum: [...THEME_IDS],
+			default: 'light-cosmic'
+		}
 	},
 	{ timestamps: true }
 );

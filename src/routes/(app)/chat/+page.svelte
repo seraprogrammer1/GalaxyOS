@@ -64,7 +64,7 @@
 			const c = characterList.find((ch) => ch._id === charId);
 			if (c) return c.nickname || c.name;
 		}
-		return modelSetting || 'AI';
+		return 'AI';
 	});
 	const userLabel = $derived(chatNameSetting.trim() || 'You');
 	const canRetry = $derived(messages.length > 0 && messages[messages.length - 1]?.role === 'user');
@@ -199,6 +199,7 @@
 			userContent = lastUserMsg.content;
 			isRetry = true;
 		}
+		const threadsSnapshot = threads;
 		if (!isRetry) {
 			const newMsg: ChatMessage = { role: 'user', content: userContent };
 			threads = threads.map((t) =>
@@ -217,6 +218,7 @@
 			const updated = (await res.json()) as ChatThread;
 			threads = threads.map((t) => (t._id === activeChatId ? { ...t, ...updated } : t));
 		} catch {
+			threads = threadsSnapshot;
 			error = 'Message failed. Please retry.';
 		} finally {
 			sending = false;
@@ -284,13 +286,16 @@
 	}
 
 	let variantGenerating = $state<number | null>(null);
+	let switchingVariant = $state(false);
 
 	async function switchVariant(msgIdx: number, delta: -1 | 1): Promise<void> {
+		if (switchingVariant) return;
 		const thread = threads.find((t) => t._id === activeChatId);
 		if (!thread?.messages) return;
 		const msg = thread.messages[msgIdx];
 		if (!msg?.variants || msg.variants.length === 0) return;
 		const newIndex = Math.max(0, Math.min((msg.activeVariant ?? 0) + delta, msg.variants.length - 1));
+		switchingVariant = true;
 		try {
 			const res = await fetch(`/api/chats/${activeChatId}/messages/${msgIdx}`, {
 				method: 'PATCH',
@@ -300,7 +305,9 @@
 			if (!res.ok) return;
 			const updated = (await res.json()) as ChatThread;
 			threads = threads.map((t) => (t._id === activeChatId ? { ...t, ...updated } : t));
-		} catch { /* non-fatal */ }
+		} catch { /* non-fatal */ } finally {
+			switchingVariant = false;
+		}
 	}
 
 	async function generateVariant(msgIdx: number): Promise<void> {

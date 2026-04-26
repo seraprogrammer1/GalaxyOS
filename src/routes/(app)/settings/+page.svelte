@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { uiStore, type DashboardLayout, type BudgetVariant } from '$lib/stores/ui';
+	import { themeStore, THEME_IDS, type ThemeId } from '$lib/stores/theme';
+	import { THEMES } from '$lib/themes';
 
 	const GEMINI_MODELS = [
 		{ value: 'gemini-2.5-pro',              label: 'Gemini 2.5 Pro' },
@@ -23,6 +25,7 @@
 	let provider = $state<'gemini' | 'chub'>('gemini');
 	let geminiModel = $state('gemini-2.5-flash');
 	let chubModel = $state('mythomax');
+	let theme = $state<ThemeId>($themeStore);
 	let saved = $state(false);
 	let settingsLoaded = $state(false);
 
@@ -42,12 +45,16 @@
 				default_provider?: string;
 				gemini_model?: string;
 				chub_model?: string;
+				theme?: string;
 			};
 			if (data.dashboard_layout) layout = data.dashboard_layout as DashboardLayout;
 			if (data.budget_variant) budget = data.budget_variant as BudgetVariant;
 			if (data.default_provider) provider = data.default_provider as 'gemini' | 'chub';
 			if (data.gemini_model) geminiModel = data.gemini_model;
 			if (data.chub_model) chubModel = data.chub_model;
+			if (data.theme && (THEME_IDS as readonly string[]).includes(data.theme)) {
+				theme = data.theme as ThemeId;
+			}
 		} finally {
 			settingsLoaded = true;
 		}
@@ -56,6 +63,7 @@
 	async function save() {
 		uiStore.setDashboardLayout(layout);
 		uiStore.setBudgetVariant(budget);
+		themeStore.set(theme);
 		await fetch('/api/settings', {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
@@ -64,7 +72,8 @@
 				budget_variant: budget,
 				default_provider: provider,
 				gemini_model: geminiModel,
-				chub_model: chubModel
+				chub_model: chubModel,
+				theme
 			})
 		});
 		saved = true;
@@ -116,6 +125,32 @@
 					class:active={budget === 'minimal'}
 					onclick={() => (budget = 'minimal')}
 				>Minimal</button>
+			</div>
+		</div>
+
+		<!-- Theme -->
+		<div class="section-divider"></div>
+
+		<div class="field-group">
+			<span class="field-label">Theme</span>
+			<div class="theme-grid">
+				{#each THEME_IDS as id (id)}
+					{@const def = THEMES[id]}
+					<button
+						class="theme-btn"
+						class:active={theme === id}
+						onclick={() => (theme = id)}
+						aria-label={def.label}
+						title={def.label}
+					>
+						<span class="theme-swatches">
+							{#each def.swatches.slice(0, 3) as color}
+								<span class="swatch" style="background:{color}"></span>
+							{/each}
+						</span>
+						<span class="theme-label">{def.label}</span>
+					</button>
+				{/each}
 			</div>
 		</div>
 
@@ -292,6 +327,56 @@
 		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238888aa' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 		background-repeat: no-repeat;
 		background-position: right 0.6rem center;
+	}
+
+	.theme-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.theme-btn {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.35rem;
+		background: var(--bg-surface, #f0eef8);
+		border: 2px solid var(--bg-glass-border, rgba(255, 255, 255, 0.85));
+		border-radius: var(--radius-sm, 8px);
+		padding: 0.5rem 0.75rem;
+		cursor: pointer;
+		transition: all 0.18s;
+		min-width: 80px;
+	}
+
+	.theme-btn.active {
+		border-color: var(--accent-primary, #ff6b8b);
+		box-shadow: 0 0 0 2px var(--accent-primary-soft, rgba(255, 107, 139, 0.25));
+	}
+
+	.theme-btn:not(.active):hover {
+		border-color: var(--accent-primary, #ff6b8b);
+		opacity: 0.85;
+	}
+
+	.theme-swatches {
+		display: flex;
+		gap: 3px;
+	}
+
+	.swatch {
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		display: inline-block;
+		border: 1px solid rgba(0,0,0,0.08);
+	}
+
+	.theme-label {
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: var(--text-secondary, #6b6b8a);
+		white-space: nowrap;
 	}
 
 	.model-select:focus {

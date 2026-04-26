@@ -12,7 +12,8 @@ export default defineConfig({
 		alias: testing
 			? {
 					$lib: fileURLToPath(new URL('./src/lib', import.meta.url)),
-					'$app/stores': fileURLToPath(new URL('./src/test-utils/app-stores.ts', import.meta.url))
+					'$app/stores': fileURLToPath(new URL('./src/test-utils/app-stores.ts', import.meta.url)),
+					'$env/dynamic/private': fileURLToPath(new URL('./src/test-utils/env-private.ts', import.meta.url))
 				}
 			: {}
 	},

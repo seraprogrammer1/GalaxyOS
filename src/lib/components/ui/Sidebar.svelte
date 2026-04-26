@@ -5,12 +5,12 @@
 	}: { currentPath?: string; username?: string } = $props();
 
 	const links = [
-		{ href: '/dashboard', label: 'Dashboard' },
-		{ href: '/budgets', label: 'Budgets' },
-		{ href: '/chat', label: 'AI Chat' },
-		{ href: '/characters', label: 'Characters' },
-		{ href: '/naca', label: 'NACA Calc' },
-		{ href: '/settings', label: 'Settings' }
+		{ href: '/dashboard',  label: 'Dashboard',  icon: '⊞' },
+		{ href: '/budgets',    label: 'Budgets',     icon: '◈' },
+		{ href: '/chat',       label: 'AI Chat',     icon: '◎' },
+		{ href: '/characters', label: 'Characters',  icon: '✦' },
+		{ href: '/naca',       label: 'NACA Calc',   icon: '△' },
+		{ href: '/settings',   label: 'Settings',    icon: '⊙' }
 	];
 
 	function isActive(href: string): boolean {
@@ -20,10 +20,13 @@
 	const initials = $derived((username || 'Explorer').slice(0, 2).toUpperCase());
 </script>
 
-<aside class="sidebar glass" data-testid="sidebar">
+<aside class="sidebar" data-testid="sidebar">
 	<div class="sidebar-brand">
-		<h2>Galaxy OS</h2>
-		<p>Command Center</p>
+		<div class="brand-icon" aria-hidden="true">✦</div>
+		<div class="brand-text">
+			<h2>Galaxy OS</h2>
+			<p>Command Center</p>
+		</div>
 	</div>
 
 	<nav class="sidebar-nav" aria-label="Sidebar Navigation">
@@ -34,7 +37,8 @@
 				class:is-active={isActive(link.href)}
 				data-testid={`sidebar-link-${link.label.toLowerCase().replace(/\s+/g, '-')}`}
 			>
-				{link.label}
+				<span class="nav-icon" aria-hidden="true">{link.icon}</span>
+				<span class="nav-label">{link.label}</span>
 			</a>
 		{/each}
 	</nav>
@@ -50,75 +54,114 @@
 
 <style>
 	.sidebar {
-		width: 16rem;
-		min-width: 16rem;
+		width: 15rem;
+		min-width: 15rem;
 		height: 100%;
 		display: flex;
 		flex-direction: column;
-		padding: 1rem;
-		border-right: 1px solid var(--bg-glass-border, rgba(255, 255, 255, 0.85));
+		padding: 1.25rem 0.875rem;
+		background: #11131c;
+		border-right: 1px solid rgba(255, 255, 255, 0.06);
 	}
 
-	.sidebar-brand h2 {
-		font-size: 1.2rem;
-		font-weight: 800;
-		background: linear-gradient(
-			135deg,
-			var(--accent-primary, #ff6b8b),
-			var(--accent-secondary, #f4a836)
-		);
+	.sidebar-brand {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		padding: 0.25rem 0.375rem 1.25rem;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		margin-bottom: 0.75rem;
+	}
+
+	.brand-icon {
+		font-size: 1.5rem;
+		line-height: 1;
+		background: linear-gradient(135deg, #f4c2c2, #d9baf7);
 		-webkit-background-clip: text;
 		-webkit-text-fill-color: transparent;
 		background-clip: text;
+		flex-shrink: 0;
 	}
 
-	.sidebar-brand p {
-		font-size: 0.75rem;
-		color: var(--text-secondary, #6b6b8a);
-		margin-top: 0.2rem;
+	.brand-text h2 {
+		font-size: 0.95rem;
+		font-weight: 700;
+		color: #e1e1ef;
+		letter-spacing: -0.01em;
+	}
+
+	.brand-text p {
+		font-size: 0.7rem;
+		color: #9d8d8d;
+		margin-top: 0.1rem;
+		letter-spacing: 0.03em;
 	}
 
 	.sidebar-nav {
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
-		margin-top: 1.25rem;
+		gap: 0.2rem;
 		flex: 1;
 	}
 
 	.nav-link {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
 		text-decoration: none;
-		color: var(--text-secondary, #6b6b8a);
-		padding: 0.6rem 0.7rem;
-		border-radius: var(--radius-sm, 8px);
-		font-size: 0.92rem;
-		font-weight: 600;
+		color: #a0a0b8;
+		padding: 0.6rem 0.75rem;
+		border-radius: 10px;
+		font-size: 0.88rem;
+		font-weight: 500;
+		letter-spacing: 0.01em;
+		border: 1px solid transparent;
 		transition:
-			background 0.2s ease,
-			color 0.2s ease;
+			background 0.18s cubic-bezier(0.23, 1, 0.32, 1),
+			color 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+	}
+
+	.nav-icon {
+		font-size: 0.85rem;
+		width: 1.1rem;
+		text-align: center;
+		opacity: 0.6;
+		flex-shrink: 0;
+		transition: opacity 0.18s;
 	}
 
 	.nav-link:hover {
-		background: var(--bg-surface, #f0eef8);
+		background: rgba(255, 255, 255, 0.06);
+		color: #e1e1ef;
+	}
+
+	.nav-link:hover .nav-icon {
+		opacity: 1;
 	}
 
 	.nav-link.is-active {
 		background: linear-gradient(
-			120deg,
-			var(--accent-primary-soft, rgba(255, 107, 139, 0.2)),
-			var(--accent-secondary-soft, rgba(244, 168, 54, 0.2))
+			135deg,
+			rgba(244, 194, 194, 0.18),
+			rgba(217, 186, 247, 0.14)
 		);
-		color: var(--text-primary, #2d2d3a);
-		outline: 1px solid var(--bg-glass-border, rgba(255, 255, 255, 0.85));
+		color: #f4c2c2;
+		border-color: rgba(244, 194, 194, 0.22);
+	}
+
+	.nav-link.is-active .nav-icon {
+		opacity: 1;
 	}
 
 	.sidebar-profile {
 		display: flex;
 		align-items: center;
 		gap: 0.65rem;
-		padding: 0.6rem;
-		border-radius: var(--radius-sm, 8px);
-		background: var(--bg-surface, #f0eef8);
+		padding: 0.75rem;
+		border-radius: 12px;
+		background: rgba(255, 255, 255, 0.04);
+		border: 1px solid rgba(255, 255, 255, 0.06);
+		margin-top: 0.5rem;
 	}
 
 	.avatar {
@@ -127,29 +170,31 @@
 		border-radius: 50%;
 		display: grid;
 		place-items: center;
-		font-size: 0.76rem;
-		font-weight: 800;
-		background: linear-gradient(
-			135deg,
-			var(--accent-primary, #ff6b8b),
-			var(--accent-secondary, #f4a836)
-		);
-		color: #fff;
+		font-size: 0.72rem;
+		font-weight: 700;
+		background: linear-gradient(135deg, #f4c2c2, #d9baf7);
+		color: #3d1a2e;
+		flex-shrink: 0;
 	}
 
 	.meta {
 		display: flex;
 		flex-direction: column;
+		gap: 0.05rem;
 	}
 
 	.name {
-		font-size: 0.85rem;
-		font-weight: 700;
-		color: var(--text-primary, #2d2d3a);
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: #e1e1ef;
+		letter-spacing: -0.01em;
 	}
 
 	.role {
-		font-size: 0.72rem;
-		color: var(--text-muted, #a0a0c0);
+		font-size: 0.68rem;
+		color: #9d8d8d;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
 	}
 </style>
+

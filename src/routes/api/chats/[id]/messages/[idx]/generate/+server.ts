@@ -19,6 +19,7 @@ import {
 	loadCharacter,
 	assembleMessages,
 	callAI,
+	describeAIError,
 	type StoredMessage
 } from '$lib/server/promptAssembler';
 import type { RequestHandler } from './$types';
@@ -90,13 +91,29 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 	let aiText: string;
 	try {
 		const assembled = await assembleMessages(historyWindow, chatDoc, character, locals.session.user_id);
-		aiText = await callAI(assembled, providerConfig);
+		aiText = await callAI(assembled, providerConfig, chatDoc.assistant_prefill.trim() || undefined);
 	} catch (e) {
 		// Restore the tail on failure so the chat state stays consistent
 		messages.push(...currentTail);
 		msg.variants[currentIdx].tail = [];
-		const errMsg = e instanceof Error ? e.message : 'AI service error';
-		return json({ error: errMsg }, { status: 502 });
+		const detail = describeAIError(e);
+		console.error('[chat variant] AI call failed', {
+			provider: providerConfig.provider,
+			model: providerConfig.provider === 'gemini' ? providerConfig.geminiModel : providerConfig.chubModel,
+			...detail,
+			stack: e instanceof Error ? e.stack : undefined
+		});
+		return json(
+			{
+				error: detail.message,
+				provider: providerConfig.provider,
+				statusCode: detail.statusCode,
+				url: detail.url,
+				responseBody: detail.responseBody,
+				cause: detail.cause
+			},
+			{ status: 502 }
+		);
 	}
 
 	const prefill = chatDoc.assistant_prefill.trim();

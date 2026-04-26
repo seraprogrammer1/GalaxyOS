@@ -88,10 +88,14 @@ describe('GET /api/settings', () => {
 				$setOnInsert: {
 					auto_delete: false,
 					dashboard_layout: 'bento',
-					budget_variant: 'standard'
+					budget_variant: 'standard',
+					default_provider: 'gemini',
+					gemini_model: 'gemini-2.5-flash',
+					chub_model: 'mythomax',
+					chat_name: ''
 				}
 			},
-			{ upsert: true, new: true }
+			{ upsert: true, returnDocument: 'after' }
 		);
 	});
 });
@@ -125,7 +129,7 @@ describe('PATCH /api/settings', () => {
 		expect(mockFindOneAndUpdate).toHaveBeenCalledWith(
 			{ user_id: userId },
 			{ $set: { auto_delete: true } },
-			{ upsert: true, new: true }
+			{ upsert: true, returnDocument: 'after' }
 		);
 	});
 
@@ -152,7 +156,7 @@ describe('PATCH /api/settings', () => {
 		expect(mockFindOneAndUpdate).toHaveBeenCalledWith(
 			{ user_id: userId },
 			{ $set: { dashboard_layout: 'sidebar', budget_variant: 'minimal' } },
-			{ upsert: true, new: true }
+			{ upsert: true, returnDocument: 'after' }
 		);
 	});
 });
