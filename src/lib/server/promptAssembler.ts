@@ -8,7 +8,7 @@ import { Lorebook } from '$lib/server/models/Lorebook';
 import { UserSettings } from '$lib/server/models/UserSettings';
 import { runLorebookEngine } from '$lib/server/lorebookEngine';
 import { applyMacros } from '$lib/server/macroEngine';
-import { callProvider } from '$lib/server/aiProviders';
+import { callProvider, streamProvider } from '$lib/server/aiProviders';
 
 export interface StoredMessage {
 	role: 'user' | 'assistant' | 'system';
@@ -197,6 +197,27 @@ export async function callAI(
 	);
 	if (!text) throw new Error('Invalid AI response');
 	return text;
+}
+
+/**
+ * Stream a response from the configured AI provider.
+ * Returns `{ textStream: ReadableStream<string> }` — same shape for both providers.
+ */
+export function streamAI(
+	assembled: StoredMessage[],
+	providerConfig: ProviderConfig,
+	prefill?: string
+): { textStream: ReadableStream<string> } {
+	const result = streamProvider(
+		assembled as import('$lib/server/aiProviders').AIMessage[],
+		providerConfig.provider,
+		providerConfig.geminiModel,
+		providerConfig.chubModel,
+		prefill
+	);
+	// streamGemini returns the full AI SDK result object; streamChub returns { textStream }
+	// Both expose .textStream so this works uniformly.
+	return { textStream: result.textStream as ReadableStream<string> };
 }
 
 /**

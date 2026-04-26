@@ -5,7 +5,7 @@ import {
 	loadProviderConfig,
 	loadCharacter,
 	assembleMessages,
-	callAI,
+	streamAI,
 	describeAIError,
 	type StoredMessage
 } from '$lib/server/promptAssembler';
@@ -53,42 +53,68 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 		.filter((m) => m.role !== 'system')
 		.slice(-contextSize);
 
-	let aiText: string;
+	let assembled: StoredMessage[];
 	try {
-		const assembled = await assembleMessages(historyWindow, chatDoc, character, locals.session.user_id);
-		aiText = await callAI(assembled, providerConfig, chatDoc.assistant_prefill.trim() || undefined);
+		assembled = await assembleMessages(historyWindow, chatDoc, character, locals.session.user_id);
 	} catch (e) {
 		const detail = describeAIError(e);
-		console.error('[chat message] AI call failed', {
-			provider: providerConfig.provider,
-			model: providerConfig.provider === 'gemini' ? providerConfig.geminiModel : providerConfig.chubModel,
-			...detail,
-			stack: e instanceof Error ? e.stack : undefined
-		});
-		return json(
-			{
-				error: detail.message,
-				provider: providerConfig.provider,
-				statusCode: detail.statusCode,
-				url: detail.url,
-				responseBody: detail.responseBody,
-				cause: detail.cause
-			},
-			{ status: 502 }
-		);
+		return json({ error: detail.message }, { status: 500 });
 	}
 
-	// Prepend prefill into stored content so history is self-consistent
 	const prefill = chatDoc.assistant_prefill.trim();
-	const storedContent = prefill ? `${prefill}${aiText}` : aiText;
+	const { textStream } = streamAI(assembled, providerConfig, prefill || undefined);
 
-	chatDoc.messages.push({
-		role: 'assistant',
-		content: storedContent,
-		variants: [{ content: storedContent, tail: [] }],
-		activeVariant: 0
-	} as StoredMessage & { variants: { content: string; tail: [] }[]; activeVariant: number });
-	await chatDoc.save();
+	const responseStream = new ReadableStream({
+		async start(controller) {
+			const enc = new TextEncoder();
+			const enqueue = (obj: unknown) =>
+				controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
 
-	return json(chat, { status: 200 });
+			let accumulated = '';
+			try {
+				const reader = textStream.getReader();
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					accumulated += value;
+					enqueue({ c: value });
+				}
+			} catch (e) {
+				const detail = describeAIError(e);
+				console.error('[chat message] stream failed', {
+					provider: providerConfig.provider,
+					model: providerConfig.provider === 'gemini' ? providerConfig.geminiModel : providerConfig.chubModel,
+					...detail
+				});
+				enqueue({ err: detail.message });
+				controller.close();
+				return;
+			}
+
+			// Persist assistant message (prepend prefill to keep history self-consistent)
+			const storedContent = prefill ? `${prefill}${accumulated}` : accumulated;
+			try {
+				chatDoc.messages.push({
+					role: 'assistant',
+					content: storedContent,
+					variants: [{ content: storedContent, tail: [] }],
+					activeVariant: 0
+				} as StoredMessage & { variants: { content: string; tail: [] }[]; activeVariant: number });
+				await chatDoc.save();
+			} catch (e) {
+				console.error('[chat message] save failed', e);
+			}
+
+			enqueue({ done: true });
+			controller.close();
+		}
+	});
+
+	return new Response(responseStream, {
+		headers: {
+			'Content-Type': 'text/event-stream',
+			'Cache-Control': 'no-cache',
+			Connection: 'keep-alive'
+		}
+	});
 };

@@ -44,6 +44,7 @@
 	let activeChatId = $state('');
 	let bootLoading = $state(true);
 	let sending = $state(false);
+	let waitingForFirstChunk = $state(false);
 	let error = $state('');
 	let renamingId = $state<string | null>(null);
 	let renameText = $state('');
@@ -202,28 +203,80 @@
 			isRetry = true;
 		}
 		const threadsSnapshot = threads;
+		const chatId = activeChatId;
+
+		// Optimistically add user message; assistant bubble added on first chunk
 		if (!isRetry) {
-			const newMsg: ChatMessage = { role: 'user', content: userContent };
 			threads = threads.map((t) =>
-				t._id === activeChatId ? { ...t, messages: [...(t.messages ?? []), newMsg] } : t
+				t._id === chatId
+					? { ...t, messages: [...(t.messages ?? []), { role: 'user' as const, content: userContent }] }
+					: t
 			);
 		}
+
 		sending = true;
+		waitingForFirstChunk = true;
 		error = '';
 		try {
-			const res = await fetch(`/api/chats/${activeChatId}/message`, {
+			const res = await fetch(`/api/chats/${chatId}/message`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ content: userContent })
 			});
 			if (!res.ok) throw new Error('Failed to send message');
-			const updated = (await res.json()) as ChatThread;
-			threads = threads.map((t) => (t._id === activeChatId ? { ...t, ...updated } : t));
+			if (!res.body) throw new Error('No response body');
+
+			// Consume SSE stream
+			const reader = res.body.getReader();
+			const decoder = new TextDecoder();
+			let buffer = '';
+			outer: while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split('\n');
+				buffer = lines.pop() ?? '';
+				for (const line of lines) {
+					if (!line.startsWith('data: ')) continue;
+					const payload = line.slice(6).trim();
+					if (!payload) continue;
+					try {
+						const evt = JSON.parse(payload) as { c?: string; done?: boolean; err?: string };
+						if (evt.err) throw new Error(evt.err);
+						if (evt.c) {
+							if (waitingForFirstChunk) {
+								// First chunk — hide typing indicator and inject the assistant bubble
+								waitingForFirstChunk = false;
+								threads = threads.map((t) =>
+									t._id !== chatId
+										? t
+										: { ...t, messages: [...(t.messages ?? []), { role: 'assistant' as const, content: evt.c! }] }
+								);
+							} else {
+								// Subsequent chunks — append to last assistant message
+								threads = threads.map((t) => {
+									if (t._id !== chatId) return t;
+									const msgs = [...(t.messages ?? [])];
+									const lastIdx = msgs.length - 1;
+									if (lastIdx >= 0 && msgs[lastIdx].role === 'assistant') {
+										msgs[lastIdx] = { ...msgs[lastIdx], content: msgs[lastIdx].content + evt.c };
+									}
+									return { ...t, messages: msgs };
+								});
+							}
+						}
+						if (evt.done) break outer;
+					} catch (parseErr) {
+						throw parseErr;
+					}
+				}
+			}
 		} catch {
 			threads = threadsSnapshot;
 			error = 'Message failed. Please retry.';
 		} finally {
 			sending = false;
+			waitingForFirstChunk = false;
 		}
 	}
 
@@ -569,7 +622,7 @@
 		<div class="chat-shell">
 			<MessageFeed
 				{messages}
-				showTyping={sending}
+				showTyping={waitingForFirstChunk}
 				charName={aiLabel}
 				userName={userLabel}
 				generatingVariantIdx={variantGenerating}

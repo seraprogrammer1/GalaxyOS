@@ -79,6 +79,16 @@
 		saved = true;
 		setTimeout(() => (saved = false), 2500);
 	}
+
+	function pickTheme(id: ThemeId): void {
+		theme = id;
+		themeStore.set(id);
+		void fetch('/api/settings', {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ theme: id })
+		});
+	}
 </script>
 
 <section class="settings-page glass" data-testid="settings-page">
@@ -139,7 +149,7 @@
 					<button
 						class="theme-btn"
 						class:active={theme === id}
-						onclick={() => (theme = id)}
+					onclick={() => pickTheme(id)}
 						aria-label={def.label}
 						title={def.label}
 					>
