@@ -6,17 +6,17 @@
 
 	const pageTitle = $derived(
 		currentPath === '/dashboard'
-			? 'Dashboard'
+			? 'Command Center'
 			: currentPath === '/settings'
-				? 'Settings'
+				? 'System Settings'
 				: currentPath === '/chat'
-					? 'AI Chat'
+					? 'AI Chat Console'
 					: currentPath === '/naca'
 						? 'NACA Calculator'
 						: currentPath === '/budgets'
 							? 'Finance Overview'
 							: currentPath === '/characters'
-								? 'Characters'
+								? 'Character Hub'
 								: 'Galaxy OS'
 	);
 
@@ -28,20 +28,21 @@
 
 <header class="glass-header glass">
 	<div class="header-left">
-		<h1 class="title">{pageTitle}</h1>
+		<h1 class="title">
+			<span class="title-prefix">Ethereal</span>
+			{pageTitle}
+		</h1>
 		<p class="greeting">Hello, {username}</p>
 	</div>
 
-	<div class="weather">
-		<span class="weather-icon" aria-label="Sunny">☀</span>
-		<span class="weather-temp">72°F</span>
+	<div class="header-right">
+		<div class="weather">
+			<span class="weather-icon" aria-label="Clear">✳</span>
+			<span class="weather-temp">72°F</span>
+		</div>
+		<span class="notification-badge" aria-label="Notifications">2 New</span>
+		<button class="logout-btn" onclick={handleLogout}>Logout</button>
 	</div>
-
-	<div class="header-controls">
-		<span class="notification-badge" aria-label="Notifications">3 New</span>
-	</div>
-
-	<button class="logout-btn" onclick={handleLogout}> Logout </button>
 </header>
 
 <style>
@@ -52,87 +53,107 @@
 		height: var(--header-height, 64px);
 		display: flex;
 		align-items: center;
-		gap: 1rem;
-		padding: 0 1.5rem;
-		border-bottom: 1px solid var(--bg-glass-border, rgba(255, 255, 255, 0.85));
+		justify-content: space-between;
+		padding: 0 1.75rem;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.55);
 	}
 
 	.header-left {
-		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
 	}
 
 	.title {
-		font-size: 1.25rem;
+		font-size: 1.15rem;
 		font-weight: 700;
-		background: linear-gradient(
-			135deg,
-			var(--accent-primary, #ff6b8b),
-			var(--accent-secondary, #f4a836)
-		);
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
+		color: var(--text-primary);
+		letter-spacing: -0.02em;
+		display: flex;
+		align-items: baseline;
+		gap: 0.4rem;
+	}
+
+	.title-prefix {
+		color: var(--accent-primary);
+		font-weight: 700;
 	}
 
 	.greeting {
-		margin-top: 0.1rem;
-		font-size: 0.82rem;
-		color: var(--text-secondary, #6b6b8a);
-		font-weight: 600;
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		font-weight: 400;
+		letter-spacing: 0.01em;
+	}
+
+	.header-right {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
 	}
 
 	.weather {
 		display: flex;
 		align-items: center;
 		gap: 0.35rem;
-		color: var(--text-secondary, #6b6b8a);
-		font-size: 0.9rem;
+		color: var(--text-secondary);
+		font-size: 0.875rem;
+		font-weight: 500;
+	}
+
+	.weather-icon {
+		font-size: 0.95rem;
+		color: var(--accent-secondary);
+	}
+
+	.notification-badge {
+		display: inline-flex;
+		align-items: center;
+		background: var(--accent-primary, #e8748a);
+		color: #fff;
+		font-size: 0.68rem;
+		font-weight: 700;
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		letter-spacing: 0.04em;
 	}
 
 	.logout-btn {
-		padding: 0.4rem 1rem;
-		border: 1px solid var(--accent-primary, #ff6b8b);
-		border-radius: var(--radius-sm, 8px);
-		background: var(--accent-primary-soft, rgba(255, 107, 139, 0.15));
-		color: var(--accent-primary, #ff6b8b);
-		font-size: 0.875rem;
-		font-weight: 500;
+		padding: 0.4rem 1.1rem;
+		border: 1px solid var(--bg-glass-border);
+		border-radius: 10px;
+		background: rgba(255, 255, 255, 0.35);
+		color: var(--text-primary);
+		font-size: 0.82rem;
+		font-weight: 600;
+		font-family: inherit;
 		cursor: pointer;
+		letter-spacing: 0.01em;
 		transition:
-			background 0.2s,
+			background 0.18s cubic-bezier(0.23, 1, 0.32, 1),
 			transform 0.1s;
 	}
 
 	.logout-btn:hover {
-		background: var(--accent-primary, #ff6b8b);
-		color: #fff;
+		background: rgba(255, 255, 255, 0.55);
 	}
 
 	.logout-btn:active {
 		transform: scale(0.97);
 	}
 
-	.header-controls {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
+	:global([data-theme='dark']) .glass-header {
+		border-bottom-color: rgba(255, 255, 255, 0.07);
 	}
 
-	.notification-badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		background: var(--accent-primary, #ff6b8b);
-		color: #fff;
-		font-size: 0.65rem;
-		font-weight: 700;
-		padding: 0.1rem 0.45rem;
-		border-radius: 999px;
-		animation: pulse-badge 2s ease-in-out infinite;
+	:global([data-theme='dark']) .logout-btn {
+		background: rgba(255, 255, 255, 0.06);
+		color: #e1e1ef;
+		border-color: rgba(255, 255, 255, 0.07);
 	}
 
-	@keyframes pulse-badge {
-		0%, 100% { opacity: 1; }
-		50% { opacity: 0.7; }
+	:global([data-theme='dark']) .logout-btn:hover {
+		background: rgba(255, 255, 255, 0.12);
 	}
 </style>
+
