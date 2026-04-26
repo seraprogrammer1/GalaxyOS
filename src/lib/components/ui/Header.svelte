@@ -13,7 +13,11 @@
 					? 'AI Chat'
 					: currentPath === '/naca'
 						? 'NACA Calculator'
-						: 'Galaxy OS'
+						: currentPath === '/budgets'
+							? 'Finance Overview'
+							: currentPath === '/characters'
+								? 'Characters'
+								: 'Galaxy OS'
 	);
 
 	async function handleLogout() {

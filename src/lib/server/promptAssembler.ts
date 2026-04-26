@@ -150,25 +150,29 @@ export async function assembleMessages(
 	}
 
 	// 3. History + optional post-history instructions
+	// Normalize to plain objects — Mongoose subdocuments carry internal fields that
+	// break serialization when sent to external APIs.
+	const plainHistory: StoredMessage[] = history.map((m) => ({ role: m.role, content: m.content }));
+
 	const phi = config.post_history_instructions.trim();
 	if (phi) {
 		const phiContent = applyMacros(phi, macroCtx);
 		let inserted = false;
-		for (let i = history.length - 1; i >= 0; i--) {
-			if (history[i].role === 'user') {
-				assembled.push(...history.slice(0, i));
+		for (let i = plainHistory.length - 1; i >= 0; i--) {
+			if (plainHistory[i].role === 'user') {
+				assembled.push(...plainHistory.slice(0, i));
 				assembled.push({ role: 'system', content: phiContent });
-				assembled.push(...history.slice(i));
+				assembled.push(...plainHistory.slice(i));
 				inserted = true;
 				break;
 			}
 		}
 		if (!inserted) {
 			assembled.push({ role: 'system', content: phiContent });
-			assembled.push(...history);
+			assembled.push(...plainHistory);
 		}
 	} else {
-		assembled.push(...history);
+		assembled.push(...plainHistory);
 	}
 
 	// 4. Assistant prefill

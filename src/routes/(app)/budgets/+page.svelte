@@ -2,6 +2,7 @@
 	import PlaidLinkButton from '$lib/components/features/PlaidLinkButton.svelte';
 	import Goals from '$lib/components/features/Goals.svelte';
 	import TransactionsModal from '$lib/components/features/TransactionsModal.svelte';
+	import StatDetailModal from '$lib/components/features/StatDetailModal.svelte';
 
 	// ── Category colour map ───────────────────────────────────────────────────────
 	const CAT_COLORS: Record<string, string> = {
@@ -42,6 +43,7 @@
 	let flowAccount = $state('');
 	let txnAccountFilter = $state('');
 	let txnModalOpen = $state(false);
+	let detailStat = $state<'balance' | 'income' | 'expense' | 'savings' | null>(null);
 
 	// ── Chart hover state ────────────────────────────────────────────────────────
 	let hoveredBar = $state<{ month: string; value: number; type: string; x: number; y: number } | null>(null);
@@ -264,13 +266,13 @@
 			<div class="stat-card glass">
 				<div class="stat-top">
 					<span class="stat-label">Total balance</span>
-					<span class="stat-arrow-icon">↗</span>
+					<span class="stat-arrow-icon" onclick={() => detailStat = 'balance'} role="button" tabindex="0" aria-label="View balance details">↗</span>
 				</div>
 				<div class="stat-value">
 					<span class="stat-dollars">${fmtWhole(totalBalance)}</span><span class="stat-cents">{fmtCents(totalBalance)}</span>
 				</div>
-				<div class="stat-change positive">
-					<span class="change-indicator">↑ {Math.abs(incomeChangePct).toFixed(1)}%</span>
+				<div class="stat-change" class:positive={incomeChangePct >= 0} class:negative={incomeChangePct < 0}>
+					<span class="change-indicator">{incomeChangePct >= 0 ? '↑' : '↓'} {Math.abs(incomeChangePct).toFixed(1)}%</span>
 					<span class="change-vs">vs last month</span>
 				</div>
 			</div>
@@ -278,7 +280,7 @@
 			<div class="stat-card glass">
 				<div class="stat-top">
 					<span class="stat-label">Income</span>
-					<span class="stat-arrow-icon">↗</span>
+					<span class="stat-arrow-icon" onclick={() => detailStat = 'income'} role="button" tabindex="0" aria-label="View income details">↗</span>
 				</div>
 				<div class="stat-value">
 					<span class="stat-dollars">${fmtWhole(monthlyIncome)}</span><span class="stat-cents">{fmtCents(monthlyIncome)}</span>
@@ -292,7 +294,7 @@
 			<div class="stat-card glass">
 				<div class="stat-top">
 					<span class="stat-label">Expense</span>
-					<span class="stat-arrow-icon">↗</span>
+					<span class="stat-arrow-icon" onclick={() => detailStat = 'expense'} role="button" tabindex="0" aria-label="View expense details">↗</span>
 				</div>
 				<div class="stat-value">
 					<span class="stat-dollars">${fmtWhole(budgetSpent)}</span><span class="stat-cents">{fmtCents(budgetSpent)}</span>
@@ -306,14 +308,10 @@
 			<div class="stat-card glass">
 				<div class="stat-top">
 					<span class="stat-label">Total savings</span>
-					<span class="stat-arrow-icon">↗</span>
+					<span class="stat-arrow-icon" onclick={() => detailStat = 'savings'} role="button" tabindex="0" aria-label="View savings details">↗</span>
 				</div>
 				<div class="stat-value">
 					<span class="stat-dollars">${fmtWhole(totalSavings)}</span><span class="stat-cents">{fmtCents(totalSavings)}</span>
-				</div>
-				<div class="stat-change positive">
-					<span class="change-indicator">↑ {Math.abs(incomeChangePct).toFixed(1)}%</span>
-					<span class="change-vs">vs last month</span>
 				</div>
 			</div>
 		</div>
@@ -423,7 +421,7 @@
 			<div class="card glass donut-card">
 				<div class="card-header">
 					<h2>Budget</h2>
-					<span class="stat-arrow-icon sm">↗</span>
+					<span class="stat-arrow-icon sm" onclick={() => detailStat = 'expense'} role="button" tabindex="0" aria-label="View expense details">↗</span>
 				</div>
 				<div class="donut-layout">
 					<div class="donut-legend">
@@ -525,6 +523,14 @@
 </div>
 
 <TransactionsModal bind:open={txnModalOpen} />
+<StatDetailModal
+	bind:open={detailStat}
+	{netWorthData}
+	{recurringData}
+	{txnData}
+	{investData}
+	{spendingByCategory}
+/>
 
 <style>
 	/* ── Page shell ─────────────────────────────────────────────────────────── */

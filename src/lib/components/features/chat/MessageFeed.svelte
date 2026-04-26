@@ -51,7 +51,7 @@
 		<p class="empty-state">Start the conversation to see responses appear here.</p>
 	{/if}
 
-	{#each messages as message, idx (`${message.role}-${idx}-${message.content}`)}
+	{#each messages as message, idx (idx)}
 		{@const isSystem = message.role === 'system'}
 		{#if !isSystem}
 			<MessageBubble
