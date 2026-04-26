@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { connectDB } from '$lib/server/db';
-import { UserSettings, GEMINI_MODELS, CHUB_MODELS } from '$lib/server/models/UserSettings';
+import { UserSettings, GEMINI_MODELS, CHUB_MODELS, THEME_IDS } from '$lib/server/models/UserSettings';
 import type { RequestHandler } from '@sveltejs/kit';
 
 // ---------------------------------------------------------------------------
@@ -24,7 +24,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 				default_provider: 'gemini',
 				gemini_model: 'gemini-2.5-flash',
 				chub_model: 'mythomax',
-				chat_name: ''
+				chat_name: '',
+				theme: 'light-cosmic'
 			}
 		},
 		{ upsert: true, returnDocument: 'after' }
@@ -81,6 +82,12 @@ export const PATCH: RequestHandler = async ({ request, locals }) => {
 	}
 	if (typeof body.chat_name === 'string') {
 		allowedUpdate.chat_name = body.chat_name.trim().slice(0, 50);
+	}
+	if (
+		typeof body.theme === 'string' &&
+		(THEME_IDS as readonly string[]).includes(body.theme)
+	) {
+		allowedUpdate.theme = body.theme;
 	}
 
 	await connectDB();
